@@ -23,6 +23,14 @@ namespace cgfx {
 
 CgfxContext::CgfxContext() = default;
 
+cgfx_result CgfxContext::set_selected_text_font(cgfx_font_id id) noexcept {
+  if (!font_registry_.is_valid(id)) {
+    return CGFX_ERROR_INVALID_ARGUMENT;
+  }
+  selected_text_font_ = id;
+  return CGFX_OK;
+}
+
 CgfxContext::~CgfxContext() { backend_.reset(); }
 
 cgfx_result CgfxContext::create(std::unique_ptr<CgfxContext> &out) {

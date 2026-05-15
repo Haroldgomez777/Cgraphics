@@ -1,4 +1,4 @@
-# cgfx (Phase 2 → Phase 6 theming)
+# cgfx (Phase 2 → Phase 7 text measurement)
 
 `cgfx` is a cross-platform GUI graphics framework in C/C++.
 
@@ -164,13 +164,27 @@ Phase 5 layers a **facet registry** on the existing tree/flex core (`src/widgets
 | --- | --- |
 | **Geometry** | Phase 4 flex + `cgfx_widget_bounds_logical_px` unchanged. |
 | **Hit testing** | **`cgfx_window_hit_test_logical_px`** remains a **pure geometric** pick (back-compat). Routed pointer events (**`target_widget`** on move/button) use **`visible=false` facet** filtering so hidden subtrees behave like pass-through. |
-| **Rendering** | **`cgfx_window_draw_basic_widgets(win)`** emits fills via **Phase 6 style resolution**: per-window `UiTheme` tokens + **`cgfx_widget_style_set_*`** overrides (canonical for panel tint) + optional legacy **`cgfx_basic_widget_panel_set_background_rgba_normalized`** facet color when no panel override is set. Button faces pick **normal / hover / pressed / disabled** layers from tokens unless overridden by **`cgfx_widget_style_set_button_*`** helpers. Labels use theme placeholder tint until the **Phase 7** text renderer consumes **`label_text_color` / label font-size** placeholders. Call after layout, inside a present pass. |
-| **Text** | Labels and button captions store UTF-8; paint uses a **thin placeholder strip**. **TODO(seam):** replace with **`cgfx_basic_widget_utf8_text_*`** driving the **Phase 7** text subsystem; typography tokens (`cgfx_theme_metric_token`, `LABEL_TEXT`, `BUTTON_TEXT`) exist on the theme/overrides APIs as placeholders until then. |
+| **Rendering** | **`cgfx_window_draw_basic_widgets(win)`** emits fills via **Phase 6 style resolution** plus **Phase 7** deterministic text measurement (`src/text`): label and button captions use resolved **`cgfx_theme_metric_token`** font sizes scaled by **present-pass DPI**, centered placeholder rectangles sized to **`cgfx_text_measure_utf8_line_pixels`**, tinted with **`CGFX_THEME_COLOR_LABEL_TEXT`** / **`CGFX_THEME_COLOR_BUTTON_TEXT`** (not the older placeholder strips). Rasterization hooks live in **`text_glyph_raster_placeholder.hpp`** (no textured glyphs yet — see Phase 7.1 below). |
+| **Text** | UTF-8 on facets; **`cgfx_text_measure_utf8_line_pixels`**, **`cgfx_font_builtin_acquire`**, and context font selection (**`cgfx_context_text_font_select`**) form the seam. Glyph upload / atlas / shaders remain **TODO** (`submit_glyph_rasterization_placeholder_todo`). |
 | **Clicks** | **Polling model:** on left-button release after a press on the **same** logical `BUTTON` facet, the library appends **`CGFX_EVENT_WIDGET_CLICK`** with **`cgfx_event_widget_click_payload`** (**`widget_id`**, **`button`**, **`x`**, **`y`**). dequeue via **`cgfx_next_event_into`**. Disabled buttons suppress hover tinting and activation. |
 
 ```c
 cgfx_widget_id root = cgfx_window_widget_root(win);
-cgfx_widget_id dock = 0;
+
+/* Phase 7: optional pre-flight measurement shares the deterministic stub metrics with widgets */
+cgfx_font_id face = CGFX_FONT_ID_INVALID;
+cgfx_font_builtin_acquire(ctx, CGFX_FONT_BUILTIN_MONO_STUB, &face);
+
+float dpi = 1.f;
+(void)cgfx_window_get_dpi_scale(win, &dpi);
+
+cgfx_text_line_metrics cap{};
+if (cgfx_text_measure_utf8_line_pixels(
+        ctx, face, "OK", 2 /*bytes*/, /*font_size_sp=*/14.f, dpi,
+        &cap) == CGFX_OK) {
+  /* Use cap.width_px / cap.line_height_px for tooling; widgets already call the same primitive
+   * during cgfx_window_draw_basic_widgets whenever text is visible. */
+}
 cgfx_basic_widget_panel_create(win, root, &dock);
 cgfx_widget_set_layout_axis(win, dock, CGFX_LAYOUT_AXIS_COLUMN);
 
@@ -240,7 +254,58 @@ cgfx_widget_style_query_resolved_button_face_rgba_normalized(
 
 - **`cgfx_phase6_style_test`** — token-driven paint, override vs theme vs legacy panel precedence, selective `clear_overrides` vs legacy facet, query API vs paint, hover path, pressed override via resolution queries (**no GPU**).
 
+### Phase 7: text measurement + widget integration (deterministic stub)
+
+Phase 7 introduces **`src/text/`**: a platform-neutral **stub font**, **deterministic UTF-8 line measurement** (no HarfBuzz/FreeType linkage yet), **`FontRegistry`** on **`cgfx_context`**, and **`BasicWidgets`** paint wired to **`cgfx_text_measure_utf8_line_pixels`** (same formulas as widgets when DPI + theme match).
+
+| Layer | Responsibility |
+| --- | --- |
+| **`FontRegistry`** | Validates **`cgfx_font_id`** handles. Today only **`CGFX_FONT_ID_BUILTIN_DEFAULT`** (**`cgfx_font_builtin_acquire(..., CGFX_FONT_BUILTIN_MONO_STUB)`**) is admitted. |
+| **`text_logical_font_px_round` / `text_measure_utf8_line_stub`** | Rounds **`font_size_sp * dpi_scale`** to integer pixels (`logical_font_px`). Horizontal advances classify Latin vs wide codepoint ranges plus a bounded “other-script” blend. Line box uses fixed ascent/descents derived from **`logical_font_px`**. Invalid UTF-8 advances one byte yielding **`U+FFFD`**. Measurement stops at the first **`\\n`** (single logical line API). |
+| **Raster seam** | `text_glyph_raster_placeholder.hpp` documents **`submit_glyph_rasterization_placeholder_todo`** (currently empty). **`BasicWidgets`** still emits a **centered fill-rect strip** tinted with **`label_text_color` / resolved button text color**. |
+| **Presenter DPI** | `CgfxWindow` saves the **`begin_present_pass`** DPI scale so **`cgfx_window_draw_basic_widgets`** matches device measurement without leaking Win32/X11 specifics into **`BasicWidgets`**. |
+
+Measured line layout helper (standalone or ahead of sizing code):
+
+```c
+cgfx_font_id face{};
+cgfx_font_builtin_acquire(ctx, CGFX_FONT_BUILTIN_MONO_STUB, &face);
+
+float dpi = 1.f;
+cgfx_window_get_dpi_scale(win, &dpi);
+
+cgfx_text_line_metrics m{};
+cgfx_text_measure_utf8_line_pixels(ctx, CGFX_FONT_ID_INVALID /*selected font*/,
+    "Hello\nTail", 0 /*strlen*/, 13.f /*sp*/, dpi, &m);
+/* m.width_px covers "Hello"; newline truncates horizontal accumulation */
+```
+
+Select the context’s default measurement font once (optional; defaults to the built-in face):
+
+```c
+cgfx_context_text_font_select(ctx, face);
+```
+
+#### Phase 7: tests
+
+- **`cgfx_text_measurement_test`** — public C API + deterministic width rules + DPI scaling + invalid args.
+- **`cgfx_widget_text_integration_test`** — offline paint rectangles match `text_layout_placeholder_centered` planning for label + button captions.
+
+#### Phase 7: known limitations
+
+- No real glyph outlines, kerning, ligatures, bidi, or font files — metrics are **documented stub tables** only.
+- Label placeholder marker color (`LabelFacet.marker_explicit` / `CGFX_THEME_COLOR_LABEL_PLACEHOLDER`) is **not** used for the Phase 7 caption strip; paint uses **`CGFX_THEME_COLOR_LABEL_TEXT`** (plus Phase 6 text-color overrides). Use marker fields for future decoration if needed.
+- Multi-line wrapping, ellipses, and rich text are **Phase 8+**.
+- Passing **`CGFX_FONT_ID_INVALID`** to **`cgfx_text_measure_utf8_line_pixels`** resolves the context’s **`cgfx_context_text_font_selected`** handle.
+
+#### Phase 7.1 (next)
+
+- Load/select **platform or bundled `.ttf` / `.otf`** resources through **`FontRegistry`**, preserving the same measurement API surface where possible.
+- Implement **`submit_glyph_rasterization_placeholder_todo`** with atlas + shader path on **`RenderCommandList`** (new command bucket) while keeping **`BasicWidgets` measurement-only** coupling.
+- Optional CoreText/DirectWrite shapers behind **`text_measure_utf8_line_stub`** indirection.
+
 ## Prerequisites
+
 
 ### Windows
 - CMake 3.20+
@@ -330,12 +395,9 @@ Notes:
 - The `-C Release` flag is primarily relevant for multi-config generators (for example, Visual Studio).
 - For single-config generators (Ninja/Make), this command still works with the existing build directory.
 
-## Baseline Verification (Phase 2–3)
+## Baseline Verification
 
-The library baseline is considered stable when all of these pass:
-- Configure: `cmake --preset windows-mingw-debug` (or equivalent platform preset)
-- Build: `cmake --build --preset build-windows-mingw-debug`
-- Tests: `ctest --preset test-windows-mingw-debug`
+The library baseline is considered stable when **`cmake --preset windows-mingw-debug`**, **`cmake --build --preset build-windows-mingw-debug`**, and **`ctest --preset test-windows-mingw-debug`** all succeed on Windows (or the equivalent Linux preset). Include **Phase 7** coverage — **`cgfx_text_measurement_test`** and **`cgfx_widget_text_integration_test`** — alongside earlier suites.
 
 ## Project Layout (Current Phase)
 
@@ -344,6 +406,7 @@ The library baseline is considered stable when all of these pass:
 - `src/core/` - context + window internals + **`widget_tree`**
 - `src/layout/` - Phase 4 flex sizing / measurement engine
 - `src/style/` - Phase 6 theme tokens + override map + resolution helpers
+- `src/text/` - Phase 7 font registry + deterministic measurement + raster placeholder seam
 - `src/platform/` - Win32/X11 platform backends
 - `src/render/` - minimal OpenGL surface/present helpers
 - `examples/` - demo app

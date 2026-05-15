@@ -3,6 +3,7 @@
 #include <cgfx/cgfx_api.h>
 
 #include "core/events/event_queue.hpp"
+#include "text/font_registry.hpp"
 
 #include <memory>
 
@@ -67,12 +68,20 @@ public:
     return event_queue_.last_enqueued_sequence();
   }
 
+  const FontRegistry &font_registry() const noexcept { return font_registry_; }
+  cgfx_font_id selected_text_font() const noexcept {
+    return selected_text_font_;
+  }
+  cgfx_result set_selected_text_font(cgfx_font_id id) noexcept;
+
 private:
   std::unique_ptr<PlatformBackend> backend_{};
   EventQueue event_queue_{};
   cgfx_input_propagation_policy default_propagation_policy_{
       CGFX_INPUT_PROPAGATION_TARGET_ONLY};
   bool input_routing_trace_enabled_{false};
+  FontRegistry font_registry_{};
+  cgfx_font_id selected_text_font_{CGFX_FONT_ID_BUILTIN_DEFAULT};
 };
 
 } // namespace cgfx

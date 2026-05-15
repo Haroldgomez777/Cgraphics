@@ -72,6 +72,10 @@ cgfx_result CgfxWindow::begin_present_pass(uint32_t *out_width_px,
 
   command_list_.reset();
   presenting_ = true;
+  presenting_text_dpi_scale_ = frame.dpi_scale;
+  if (!(presenting_text_dpi_scale_ > 0.f)) {
+    presenting_text_dpi_scale_ = 1.f;
+  }
 
   if (out_width_px) {
     *out_width_px = frame.width_px;
@@ -132,6 +136,7 @@ void CgfxWindow::end_present_pass() {
   }
   command_list_.reset();
   presenting_ = false;
+  presenting_text_dpi_scale_ = 1.f;
 }
 
 cgfx_result CgfxWindow::draw_basic_widgets() {
@@ -139,7 +144,8 @@ cgfx_result CgfxWindow::draw_basic_widgets() {
     return CGFX_ERROR_PLATFORM;
   }
   return basic_widgets_mut().paint(widget_tree_mut(), command_list_, ui_theme_,
-                                   widget_style_overrides_);
+                                   widget_style_overrides_,
+                                   presenting_text_dpi_scale_);
 }
 
 void CgfxWindow::sync_widget_layout_logical_from_surface() noexcept {

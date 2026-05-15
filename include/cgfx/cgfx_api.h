@@ -427,8 +427,10 @@ CGFX_API cgfx_result cgfx_basic_widget_button_create(cgfx_window *window,
  *
  * Colors resolve from per-window theme tokens + Phase 6 per-widget overrides; panels additionally
  * consider the Phase 5 facet path (see `cgfx_basic_widget_panel_set_background_rgba_normalized`).
- * Panels: override > legacy facet > theme token. Labels still render UTF-8 via a clipped
- * placeholder strip until the Phase 7 text subsystem lands. */
+ * Panels: override > legacy facet > theme token. Label/button captions consume **Phase 7** text
+ * measurement (`cgfx_text_measure_utf8_line_pixels`) for deterministic placeholder geometry plus
+ * **Phase 6** resolved text tint + font metric tokens. True glyph rasterization remains open behind
+ * the internal raster seam (see README Phase 7). */
 CGFX_API cgfx_result cgfx_window_draw_basic_widgets(cgfx_window *window);
 
 CGFX_API cgfx_result cgfx_basic_widget_set_visible(cgfx_window *window,
@@ -641,6 +643,47 @@ cgfx_widget_style_query_resolved_button_text_placeholder_rgba_normalized(
 
 CGFX_API cgfx_result cgfx_widget_style_query_resolved_button_font_size_sp_placeholder(
     cgfx_window *window, cgfx_widget_id button_id, float *out_font_size_sp);
+
+/* ---- Phase 7: deterministic text measurement + built-in font handles (stub shaping) ---- */
+
+typedef uint64_t cgfx_font_id;
+
+#ifndef CGFX_FONT_ID_INVALID
+#  define CGFX_FONT_ID_INVALID UINT64_C(0)
+#endif
+#ifndef CGFX_FONT_ID_BUILTIN_DEFAULT
+#  define CGFX_FONT_ID_BUILTIN_DEFAULT UINT64_C(1)
+#endif
+
+typedef enum cgfx_font_builtin_kind {
+  /** Deterministic monospace-style metrics backed by cgfx-internal tables (Phase 7). */
+  CGFX_FONT_BUILTIN_MONO_STUB = 0,
+} cgfx_font_builtin_kind;
+
+typedef struct cgfx_text_line_metrics {
+  uint32_t width_px;
+  uint32_t ascent_px;
+  uint32_t descent_px;
+  uint32_t line_height_px;
+  /** Rounded `floor(font_size_sp * dpi_scale)` when scale is finite and > 0; else fallback 1. */
+  uint32_t logical_font_px;
+} cgfx_text_line_metrics;
+
+/** Returns the immutable built-in deterministic font used for Phase 7 layout when @p kind is
+ * supported. Context is validated but no dynamic loading occurs yet (`Phase 7.1` file-backed fonts). */
+CGFX_API cgfx_result cgfx_font_builtin_acquire(const cgfx_context *context,
+                                               cgfx_font_builtin_kind kind,
+                                               cgfx_font_id *out_font_id);
+
+CGFX_API cgfx_result cgfx_context_text_font_select(cgfx_context *context,
+                                                   cgfx_font_id font_id);
+CGFX_API cgfx_result cgfx_context_text_font_selected(const cgfx_context *context,
+                                                     cgfx_font_id *out_font_id);
+
+CGFX_API cgfx_result cgfx_text_measure_utf8_line_pixels(
+    const cgfx_context *context, cgfx_font_id font_id, const char *utf8_bytes,
+    size_t utf8_byte_length, float font_size_sp, float dpi_scale,
+    cgfx_text_line_metrics *out_metrics);
 
 #ifdef __cplusplus
 }

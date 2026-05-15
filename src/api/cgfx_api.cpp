@@ -5,8 +5,10 @@
 #include "core/window_impl.hpp"
 #include "style/ui_theme.hpp"
 #include "style/widget_style_overrides.hpp"
+#include "text/text_layout_stub.hpp"
 #include "widgets/basic_widgets.hpp"
 
+#include <cmath>
 #include <cstring>
 #include <memory>
 #include <type_traits>
@@ -1339,6 +1341,92 @@ cgfx_result cgfx_widget_style_query_resolved_button_font_size_sp_placeholder(
   cgfx::CgfxWindow *w = cgfx::CgfxWindow::from_opaque(window);
   return w->basic_widgets().query_resolved_button_font_size_sp_placeholder(
       button_id, w->ui_theme(), w->widget_style_overrides(), out_font_size_sp);
+}
+
+cgfx_result cgfx_font_builtin_acquire(const cgfx_context *context,
+                                      cgfx_font_builtin_kind kind,
+                                      cgfx_font_id *out_font_id) {
+  if (!out_font_id) {
+    return CGFX_ERROR_INVALID_ARGUMENT;
+  }
+  *out_font_id = CGFX_FONT_ID_INVALID;
+  if (!context) {
+    return CGFX_ERROR_INVALID_ARGUMENT;
+  }
+  if (kind != CGFX_FONT_BUILTIN_MONO_STUB) {
+    return CGFX_ERROR_UNSUPPORTED;
+  }
+  *out_font_id = CGFX_FONT_ID_BUILTIN_DEFAULT;
+  return CGFX_OK;
+}
+
+cgfx_result cgfx_context_text_font_select(cgfx_context *context,
+                                          cgfx_font_id font_id) {
+  if (!context) {
+    return CGFX_ERROR_INVALID_ARGUMENT;
+  }
+  return cgfx::CgfxContext::from_opaque(context)->set_selected_text_font(font_id);
+}
+
+cgfx_result cgfx_context_text_font_selected(const cgfx_context *context,
+                                            cgfx_font_id *out_font_id) {
+  if (!context || !out_font_id) {
+    return CGFX_ERROR_INVALID_ARGUMENT;
+  }
+  *out_font_id =
+      cgfx::CgfxContext::from_opaque(const_cast<cgfx_context *>(context))
+          ->selected_text_font();
+  return CGFX_OK;
+}
+
+cgfx_result cgfx_text_measure_utf8_line_pixels(const cgfx_context *context,
+                                             cgfx_font_id font_id,
+                                             const char *utf8_bytes,
+                                             size_t utf8_byte_length,
+                                             float font_size_sp, float dpi_scale,
+                                             cgfx_text_line_metrics *out_metrics) {
+  if (!context || !out_metrics) {
+    return CGFX_ERROR_INVALID_ARGUMENT;
+  }
+  std::memset(out_metrics, 0, sizeof(*out_metrics));
+  if (!std::isfinite(font_size_sp) || font_size_sp <= 0.f) {
+    return CGFX_ERROR_INVALID_ARGUMENT;
+  }
+  const char *bytes = utf8_bytes;
+  size_t nbytes = utf8_byte_length;
+  if (!bytes) {
+    if (nbytes != 0U) {
+      return CGFX_ERROR_INVALID_ARGUMENT;
+    }
+    bytes = "";
+  } else if (nbytes == 0U) {
+    nbytes = std::strlen(bytes);
+  }
+  cgfx::CgfxContext *ctx =
+      cgfx::CgfxContext::from_opaque(const_cast<cgfx_context *>(context));
+  cgfx_font_id fid = font_id;
+  if (fid == CGFX_FONT_ID_INVALID) {
+    fid = ctx->selected_text_font();
+  }
+  if (!ctx->font_registry().is_valid(fid)) {
+    return CGFX_ERROR_INVALID_ARGUMENT;
+  }
+  float d = dpi_scale;
+  if (!std::isfinite(d) || d <= 0.f) {
+    d = 1.f;
+  }
+  const uint32_t fpx = cgfx::text_logical_font_px_round(font_size_sp, d);
+  if (fpx == 0U) {
+    return CGFX_ERROR_INVALID_ARGUMENT;
+  }
+  const cgfx::TextLineMetrics m =
+      cgfx::text_measure_utf8_line_stub(fpx, bytes, nbytes);
+  out_metrics->width_px = m.width_px;
+  out_metrics->ascent_px = m.ascent_px;
+  out_metrics->descent_px = m.descent_px;
+  out_metrics->line_height_px = m.line_height_px;
+  out_metrics->logical_font_px = fpx;
+  return CGFX_OK;
 }
 
 } // extern "C"

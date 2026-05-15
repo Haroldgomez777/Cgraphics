@@ -8,6 +8,9 @@
 #include "style/ui_theme.hpp"
 #include "style/widget_style_overrides.hpp"
 
+#include "text/text_glyph_raster_placeholder.hpp"
+#include "text/text_layout_stub.hpp"
+
 
 
 #include <algorithm>
@@ -147,30 +150,7 @@ void collect_alive_subtree_ordered_preorder(const WidgetTree &tree,
 }
 
 
-
-uint32_t placeholder_width_px(const std::string &utf8_text) noexcept {
-
-  const size_t n = utf8_text.size();
-
-  constexpr uint32_t kPerRun = 6U;
-
-  constexpr uint32_t kMax = 1200U;
-
-  const uint64_t scaled = static_cast<uint64_t>(n) * kPerRun;
-
-  if (scaled > kMax) {
-
-    return kMax;
-
-  }
-
-  return static_cast<uint32_t>(std::max(scaled, static_cast<uint64_t>(24U)));
-
 }
-
-
-
-} // namespace
 
 
 
@@ -612,7 +592,9 @@ cgfx_result BasicWidgets::paint(const WidgetTree &tree,
 
                                 const UiTheme &theme,
 
-                                const WidgetStyleOverrides &overrides) {
+                                const WidgetStyleOverrides &overrides,
+
+                                float dpi_scale) {
 
   if (tree.nodes().empty()) {
 
@@ -692,29 +674,44 @@ cgfx_result BasicWidgets::paint(const WidgetTree &tree,
 
       }
 
-      const uint32_t strip_w =
+      float sp_scale = dpi_scale;
 
-          std::min(placeholder_width_px(lb.text_utf8), r.width);
+      if (!(sp_scale > 0.f) || !std::isfinite(sp_scale)) {
 
-      const uint32_t strip_h = std::max(2U, r.height / 10U);
+        sp_scale = 1.f;
 
-      const int32_t sx =
+      }
 
-          r.x + static_cast<int32_t>((r.width - strip_w) / 2U);
+      const float sp_label = style_resolution::resolve_label_font_size_sp(theme, rec);
 
-      const int32_t sy =
+      uint32_t fpx_label = text_logical_font_px_round(sp_label, sp_scale);
 
-          r.y + static_cast<int32_t>(r.height - (r.height / 4U)) -
+      if (fpx_label == 0U) {
 
-          static_cast<int32_t>(strip_h);
+        fpx_label = 1U;
 
-      const RgbaNormalized mc =
+      }
 
-          style_resolution::resolve_label_placeholder(theme, rec, lb);
+      const TextLineMetrics m_label = text_measure_utf8_line_stub(
+          fpx_label, lb.text_utf8.data(), lb.text_utf8.size());
 
-      (void)cmds.append_fill_rect(sx, sy, strip_w, strip_h, mc.r, mc.g, mc.b,
+      TextPlaceholderBox plan_label{};
 
-                                  mc.a);
+      text_layout_placeholder_centered(r, m_label, r.width, &plan_label);
+
+      if (plan_label.width_px > 0U && plan_label.height_px > 0U) {
+
+        const RgbaNormalized mc = style_resolution::resolve_label_text_color(theme, rec);
+
+        (void)cmds.append_fill_rect(plan_label.origin_x, plan_label.origin_y,
+                                    plan_label.width_px, plan_label.height_px, mc.r, mc.g,
+                                    mc.b, mc.a);
+        /** Phase 7.1: replace fill with glyph submission when raster backend lands. */
+
+        text_raster_backend::submit_glyph_rasterization_placeholder_todo(
+            plan_label, m_label, cmds);
+
+      }
 
       break;
 
@@ -740,31 +737,47 @@ cgfx_result BasicWidgets::paint(const WidgetTree &tree,
 
       if (!bt.caption_utf8.empty()) {
 
-        const uint32_t inner_w =
+        const uint32_t inner_w_btn = r.width > caption_pad_px * 2U ? r.width - caption_pad_px * 2U : r.width;
 
-            r.width > caption_pad_px * 2U ? r.width - caption_pad_px * 2U : r.width;
+        float dpi_btn = dpi_scale;
 
-        const uint32_t strip_w =
+        if (!(dpi_btn > 0.f) || !std::isfinite(dpi_btn)) {
 
-            std::min(placeholder_width_px(bt.caption_utf8), inner_w);
+          dpi_btn = 1.f;
 
-        const uint32_t strip_h = std::max(2U, r.height / 10U);
+        }
 
-        const int32_t sx =
+        const float sp_bt = style_resolution::resolve_button_font_size_sp(theme, rec);
 
-            r.x + static_cast<int32_t>((r.width - strip_w) / 2U);
+        uint32_t fpx_bt = text_logical_font_px_round(sp_bt, dpi_btn);
 
-        const int32_t sy =
+        if (fpx_bt == 0U) {
 
-            r.y + static_cast<int32_t>((r.height - strip_h) / 2U);
+          fpx_bt = 1U;
 
-        const RgbaNormalized cap =
+        }
 
-            style_resolution::resolve_button_caption_placeholder(theme, rec);
+        const TextLineMetrics m_bt =
+            text_measure_utf8_line_stub(fpx_bt, bt.caption_utf8.data(),
+                                        bt.caption_utf8.size());
 
-        (void)cmds.append_fill_rect(sx, sy, strip_w, strip_h, cap.r, cap.g,
+        TextPlaceholderBox plan_bt{};
 
-                                    cap.b, cap.a);
+        text_layout_placeholder_centered(r, m_bt, inner_w_btn, &plan_bt);
+
+        if (plan_bt.width_px > 0U && plan_bt.height_px > 0U) {
+
+          const RgbaNormalized cap =
+
+              style_resolution::resolve_button_text_color_placeholder(theme, rec);
+
+          (void)cmds.append_fill_rect(plan_bt.origin_x, plan_bt.origin_y, plan_bt.width_px,
+                                      plan_bt.height_px, cap.r, cap.g, cap.b, cap.a);
+
+          text_raster_backend::submit_glyph_rasterization_placeholder_todo(plan_bt,
+                                                                             m_bt, cmds);
+
+        }
 
       }
 

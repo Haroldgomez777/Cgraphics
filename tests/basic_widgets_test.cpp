@@ -94,7 +94,7 @@ int main() {
   cgfx::UiTheme theme = cgfx::UiTheme::make_phase5_builtin();
   cgfx::WidgetStyleOverrides style_over{};
   RenderCommandList cmds{};
-  assert(widgets.paint(tree, cmds, theme, style_over) == CGFX_OK);
+  assert(widgets.paint(tree, cmds, theme, style_over, 1.0f) == CGFX_OK);
 
   unsigned fill_count = 0U;
   for (const auto &cmd : cmds.commands()) {
@@ -130,7 +130,7 @@ int main() {
 
   cmds.reset();
 
-  assert(widgets.paint(tree, cmds, theme, style_over) == CGFX_OK);
+  assert(widgets.paint(tree, cmds, theme, style_over, 1.0f) == CGFX_OK);
 
   fill_count = 0U;
 

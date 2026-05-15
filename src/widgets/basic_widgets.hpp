@@ -102,7 +102,8 @@ public:
                                WidgetClickSynthesisResult *out_click) noexcept;
 
   cgfx_result paint(const WidgetTree &tree, RenderCommandList &cmds,
-                    const UiTheme &theme, const WidgetStyleOverrides &overrides);
+                    const UiTheme &theme, const WidgetStyleOverrides &overrides,
+                    float dpi_scale);
 
   /** Property helpers (reject unknown / wrong kind). */
   cgfx_result set_visible(cgfx_widget_id id, bool visible) noexcept;

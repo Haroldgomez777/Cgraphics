@@ -87,7 +87,7 @@ int main() {
 
   run_flex_layout(tree, kW, kH);
   RenderCommandList cmds{};
-  assert(widgets.paint(tree, cmds, warm, ovs) == CGFX_OK);
+  assert(widgets.paint(tree, cmds, warm, ovs, 1.0f) == CGFX_OK);
   assert(fill_rect_count(cmds) == 1U);
   {
     FillRectView v = nth_fill_rect(cmds, 0);
@@ -97,7 +97,7 @@ int main() {
   /** --- Per-widget override wins over theme --- */
   assert(ovs.set_panel_background(panel, 0.01f, 0.02f, 0.03f, 1.f) == CGFX_OK);
   cmds.reset();
-  assert(widgets.paint(tree, cmds, warm, ovs) == CGFX_OK);
+  assert(widgets.paint(tree, cmds, warm, ovs, 1.0f) == CGFX_OK);
   {
     FillRectView v = nth_fill_rect(cmds, 0);
     assert(near_f(v.r, 0.01f) && near_f(v.g, 0.02f) && near_f(v.b, 0.03f));
@@ -106,7 +106,7 @@ int main() {
   /** --- Legacy facet sits below Phase 6 panel override, above theme --- */
   assert(widgets.set_panel_background_rgba(panel, 0.5f, 0.5f, 0.5f, 1.f) == CGFX_OK);
   cmds.reset();
-  assert(widgets.paint(tree, cmds, warm, ovs) == CGFX_OK);
+  assert(widgets.paint(tree, cmds, warm, ovs, 1.0f) == CGFX_OK);
   {
     FillRectView v = nth_fill_rect(cmds, 0);
     assert(near_f(v.r, 0.01f)); /* override still dominates */
@@ -121,7 +121,7 @@ int main() {
              panel, warm, ovs, &qr, &qg, &qb, &qa) == CGFX_OK);
   assert(near_f(qr, 0.5f) && near_f(qg, 0.5f) && near_f(qb, 0.5f));
   cmds.reset();
-  assert(widgets.paint(tree, cmds, warm, ovs) == CGFX_OK);
+  assert(widgets.paint(tree, cmds, warm, ovs, 1.0f) == CGFX_OK);
   {
     FillRectView v = nth_fill_rect(cmds, 0);
     assert(near_f(v.r, qr) && near_f(v.g, qg) && near_f(v.b, qb));
@@ -131,7 +131,7 @@ int main() {
 
   ovs.clear_all(panel);
   cmds.reset();
-  assert(widgets.paint(tree, cmds, warm, ovs) == CGFX_OK);
+  assert(widgets.paint(tree, cmds, warm, ovs, 1.0f) == CGFX_OK);
   {
     FillRectView v = nth_fill_rect(cmds, 0);
     assert(near_f(v.r, 0.5f) && near_f(v.g, 0.5f) && near_f(v.b, 0.5f));
@@ -150,7 +150,7 @@ int main() {
   cmds.reset();
   run_flex_layout(tree, kW, kH);
   ovs.clear_all(panel); /* leftover cleared */
-  assert(widgets.paint(tree, cmds, ui2, ovs) == CGFX_OK);
+  assert(widgets.paint(tree, cmds, ui2, ovs, 1.0f) == CGFX_OK);
 
   cgfx_layout_rect btn_bounds{};
   assert(tree.get_bounds(btn_only, &btn_bounds) == CGFX_OK);
@@ -160,7 +160,7 @@ int main() {
       btn_bounds.y + static_cast<int32_t>(btn_bounds.height / 2);
   widgets.on_mouse_move_logical(tree, btn_only, hx, hy);
   cmds.reset();
-  assert(widgets.paint(tree, cmds, ui2, ovs) == CGFX_OK);
+  assert(widgets.paint(tree, cmds, ui2, ovs, 1.0f) == CGFX_OK);
 
   assert(fill_rect_count(cmds) >= 2U);
   {

@@ -28,6 +28,8 @@ set(CGFX_PUBLIC_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/include")
   src/core/window_impl.cpp
   src/render/render_command_list.cpp
   src/render/render_gl_device.cpp
+  src/text/font_registry.cpp
+  src/text/text_layout_stub.cpp
 )
 
 target_include_directories(cgfx
@@ -154,6 +156,7 @@ if(CGFX_BUILD_TESTS)
       src/style/ui_theme.cpp
       src/style/widget_style_overrides.cpp
       src/render/render_command_list.cpp
+      src/text/text_layout_stub.cpp
   )
   target_include_directories(cgfx_basic_widgets_test PRIVATE
       "${CMAKE_CURRENT_SOURCE_DIR}/src"
@@ -173,6 +176,7 @@ if(CGFX_BUILD_TESTS)
       src/style/ui_theme.cpp
       src/style/widget_style_overrides.cpp
       src/render/render_command_list.cpp
+      src/text/text_layout_stub.cpp
   )
   target_include_directories(cgfx_phase6_style_test PRIVATE
       "${CMAKE_CURRENT_SOURCE_DIR}/src"
@@ -184,4 +188,28 @@ if(CGFX_BUILD_TESTS)
   target_compile_options(cgfx_phase6_style_test PRIVATE
       $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall -Wextra -Wpedantic>)
   add_test(NAME cgfx_phase6_style_test COMMAND cgfx_phase6_style_test)
+
+  add_executable(cgfx_text_measurement_test tests/text_measurement_test.c)
+  target_link_libraries(cgfx_text_measurement_test PRIVATE cgfx)
+  add_test(NAME cgfx_text_measurement_test COMMAND cgfx_text_measurement_test)
+
+  add_executable(cgfx_widget_text_integration_test tests/widget_text_integration_test.cpp
+      src/core/widget_tree.cpp
+      src/layout/flex_layout.cpp
+      src/widgets/basic_widgets.cpp
+      src/style/ui_theme.cpp
+      src/style/widget_style_overrides.cpp
+      src/render/render_command_list.cpp
+      src/text/text_layout_stub.cpp
+  )
+  target_include_directories(cgfx_widget_text_integration_test PRIVATE
+      "${CMAKE_CURRENT_SOURCE_DIR}/src"
+      "${CMAKE_CURRENT_SOURCE_DIR}/include"
+  )
+  set_target_properties(cgfx_widget_text_integration_test PROPERTIES
+      CXX_STANDARD 17
+      CXX_EXTENSIONS OFF)
+  target_compile_options(cgfx_widget_text_integration_test PRIVATE
+      $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall -Wextra -Wpedantic>)
+  add_test(NAME cgfx_widget_text_integration_test COMMAND cgfx_widget_text_integration_test)
 endif()

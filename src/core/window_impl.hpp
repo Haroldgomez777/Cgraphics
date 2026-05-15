@@ -133,6 +133,8 @@ private:
   cgfx_widget_id focus_widget_id_raw_{CGFX_WIDGET_ID_NONE};
   cgfx_input_propagation_policy input_propagation_policy_{CGFX_INPUT_PROPAGATION_TARGET_ONLY};
   bool presenting_{false};
+  /** Valid while `presenting_`; defaults to `1.f`. Used when drawing basic-widget text stubs. */
+  float presenting_text_dpi_scale_{1.f};
 };
 
 /** Used by centralized event_dispatch; keeps Win32/X11 backends free of widget coupling. */
