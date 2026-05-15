@@ -20,6 +20,7 @@ add_library(cgfx SHARED
   src/core/events/internal_event.cpp
   src/core/events/event_queue.cpp
   src/core/events/event_dispatch.cpp
+  src/core/events/event_routing_diagnostics.cpp
   src/core/input_propagation.cpp
   src/core/window_impl.cpp
   src/render/render_command_list.cpp
@@ -75,6 +76,12 @@ if(CGFX_BUILD_TESTS)
   add_executable(cgfx_minimal_shutdown tests/minimal_shutdown.c)
   target_link_libraries(cgfx_minimal_shutdown PRIVATE cgfx)
   add_test(NAME cgfx_minimal_shutdown COMMAND cgfx_minimal_shutdown)
+
+  add_executable(cgfx_event_trace_toggle_api_test
+      tests/event_trace_toggle_api_test.c)
+  target_link_libraries(cgfx_event_trace_toggle_api_test PRIVATE cgfx)
+  add_test(NAME cgfx_event_trace_toggle_api_test
+      COMMAND cgfx_event_trace_toggle_api_test)
 
   add_executable(cgfx_event_queue_test tests/event_queue_test.cpp
       src/core/events/event_queue.cpp

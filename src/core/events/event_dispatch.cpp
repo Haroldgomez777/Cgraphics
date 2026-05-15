@@ -2,6 +2,7 @@
 
 #include "core/context.hpp"
 #include "core/input_propagation.hpp"
+#include "core/events/event_routing_diagnostics.hpp"
 #include "core/window_impl.hpp"
 
 #include <vector>
@@ -11,20 +12,26 @@ namespace cgfx {
 namespace {
 
 void enqueue_mouse_button_propagating(CgfxContext &ctx, CgfxWindow *window,
-                                     cgfx_event_mouse_button_payload p) {
+                                      cgfx_event_mouse_button_payload p) {
   std::vector<cgfx_widget_id> receivers;
   build_input_route_receiver_ids(window->widget_tree(), p.target_widget,
-                                 window->input_propagation_policy(), receivers);
+                                 window->input_propagation_policy(),
+                                 receivers);
 
   for (cgfx_widget_id routed : receivers) {
     cgfx_event_mouse_button_payload copy = p;
     copy.routed_widget = routed;
     ctx.enqueue_event(InternalEvent::mouse_button(window, copy));
+    if (ctx.input_routing_trace_enabled()) {
+      emit_input_routing_route_trace(
+          CGFX_EVENT_MOUSE_BUTTON, ctx.last_enqueued_event_sequence(),
+          p.target_widget, routed, window->input_propagation_policy());
+    }
   }
 }
 
 void enqueue_key_propagating(CgfxContext &ctx, CgfxWindow *window,
-                            cgfx_event_key_payload p) {
+                             cgfx_event_key_payload p) {
   std::vector<cgfx_widget_id> receivers;
   build_input_route_receiver_ids(window->widget_tree(), p.target_widget,
                                  window->input_propagation_policy(), receivers);
@@ -33,6 +40,11 @@ void enqueue_key_propagating(CgfxContext &ctx, CgfxWindow *window,
     cgfx_event_key_payload copy = p;
     copy.routed_widget = routed;
     ctx.enqueue_event(InternalEvent::key(window, copy));
+    if (ctx.input_routing_trace_enabled()) {
+      emit_input_routing_route_trace(
+          CGFX_EVENT_KEY, ctx.last_enqueued_event_sequence(),
+          p.target_widget, routed, window->input_propagation_policy());
+    }
   }
 }
 

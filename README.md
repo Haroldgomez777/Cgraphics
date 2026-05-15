@@ -38,7 +38,7 @@ cgfx_context_set_event_resize_coalesce(ctx, true);
 ### Phase 3: tests
 
 - `cgfx_minimal_shutdown` — library smoke load.
-- **`cgfx_event_queue_test`** — ordering, resize coalesce, DROP_OLDEST / DROP_NEWEST, bounded priority re-queue coverage (no window or GPU required).
+- **`cgfx_event_queue_test`** — ordering, resize coalesce, DROP_OLDEST / DROP_NEWEST, bounded priority re-queue coverage, **enqueue sequence ids** (no window or GPU required).
 
 ### Phase 4: widget tree + flex layout baseline
 
@@ -132,6 +132,7 @@ while (cgfx_next_event_into(ctx, &ev)) {
     cgfx_widget_id routed_stop = ev.payload.key.routed_widget;
     (void)leaf;
     (void)routed_stop;
+    (void)ev.sequence; /* queue admission id; compare with stderr when tracing */
   }
 }
 ```
@@ -140,6 +141,20 @@ while (cgfx_next_event_into(ctx, &ev)) {
 
 - **`cgfx_widget_input_routing_test`** — hit depth, overlapping siblings + reparent z-order, focus validation helper.
 - **`cgfx_input_route_receivers_test`** — deterministic bubble expansion vs target-only and focus-at-root analogue.
+- **`cgfx_event_trace_toggle_api_test`** — routing trace flag defaults off and round-trips through the C API.
+
+### Phase 4.1: event sequence & routed-stream diagnostics
+
+Each time an event is **admitted** to the per-context queue it receives a **`uint64_t` sequence** counter (starting at **1**). **`cgfx_next_event_into`** and **`cgfx_next_event_with_sequence`** expose it; use it to line up **expanded bubble entries** (same physical input, different `routed_widget`) with tooling or logs.
+
+```c
+cgfx_context_set_input_routing_trace_enabled(ctx, true);
+/* stderr: cgfx-route … seq=… tgt=… rtd=… pol=… — one line per routed queue slot */
+```
+
+Tracing is **off by default** (`fprintf` is skipped entirely when disabled). **`cgfx_next_event_with_sequence`** mirrors **`cgfx_next_event`** but optionally returns the same id as **`cgfx_event.sequence`**.
+
+**Note:** sequence reflects **enqueue order**, not necessarily **dequeue order** if the undersized-buffer path re-queues via **`push_priority_front`** (existing sequence is preserved on retry; a fresh priority insert gets a new higher id).
 
 ## Prerequisites
 

@@ -2,6 +2,7 @@
 #include "core/events/event_queue.hpp"
 
 #include <cassert>
+#include <cstdint>
 #include <variant>
 namespace {
 
@@ -29,7 +30,7 @@ int main() {
 
   auto *wnd = reinterpret_cast<cgfx::CgfxWindow *>(uintptr_t{0x4});
 
-  // FIFO ordering between distinct event kinds
+  // FIFO ordering between distinct event kinds + enqueue sequence admission
   {
     EventQueue q;
     q.set_coalesce_resize(false);
@@ -42,6 +43,9 @@ int main() {
     assert(q.pop(b));
     assert(cgfx::internal_event_kind(a) == CGFX_EVENT_CLOSE_REQUEST);
     assert(cgfx::internal_event_kind(b) == CGFX_EVENT_MOUSE_MOVE);
+    assert(cgfx::internal_event_sequence(a) == 1);
+    assert(cgfx::internal_event_sequence(b) ==
+           cgfx::internal_event_sequence(a) + 1);
     assert(q.empty());
   }
 
@@ -59,6 +63,7 @@ int main() {
     assert(r);
     assert(r->payload.width == 20);
     assert(r->payload.height == 22);
+    assert(cgfx::internal_event_sequence(e) == 1);
     assert(q.resize_coalesce_commit_count() >= 1);
   }
 
@@ -82,6 +87,7 @@ int main() {
     assert(fv && sv);
     assert(fv->payload.x == 2);
     assert(sv->payload.x == 3);
+    assert(cgfx::internal_event_sequence(first) < cgfx::internal_event_sequence(second));
   }
 
   // push_priority_front stays within max_depth (tail eviction + drop stat)
@@ -104,6 +110,9 @@ int main() {
     assert(av && bv);
     assert(av->payload.x == 9);
     assert(bv->payload.x == 1);
+    assert(q.last_enqueued_sequence() == cgfx::internal_event_sequence(a));
+    assert(cgfx::internal_event_sequence(a) ==
+           cgfx::internal_event_sequence(b) + 2);
   }
 
   // DROP_NEWEST rejects under back-pressure
@@ -124,6 +133,7 @@ int main() {
     auto *xv = std::get_if<cgfx::EventMouseMove>(&x.body);
     auto *yv = std::get_if<cgfx::EventMouseMove>(&y.body);
     assert(xv && yv && xv->payload.x == 1 && yv->payload.x == 2);
+    assert(cgfx::internal_event_sequence(x) < cgfx::internal_event_sequence(y));
   }
 
   return 0;

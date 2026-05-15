@@ -63,6 +63,8 @@ void EventQueue::push(InternalEvent ev) {
     return;
   }
 
+  ev.sequence = ++next_sequence_;
+  last_enqueued_sequence_ = ev.sequence;
   queue_.push_back(std::move(ev));
 }
 
@@ -74,7 +76,12 @@ void EventQueue::push_priority_front(const InternalEvent &ev) {
     queue_.pop_back();
     dropped_events_ += 1;
   }
-  queue_.push_front(ev);
+  InternalEvent copy = ev;
+  if (copy.sequence == 0) {
+    copy.sequence = ++next_sequence_;
+  }
+  last_enqueued_sequence_ = copy.sequence;
+  queue_.push_front(std::move(copy));
 }
 
 bool EventQueue::pop(InternalEvent &out) {

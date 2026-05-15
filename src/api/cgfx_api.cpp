@@ -56,6 +56,7 @@ void internal_event_to_out(const cgfx::InternalEvent &iev,
   out_ev->type = cgfx::internal_event_kind(iev);
   cgfx::CgfxWindow *w = cgfx::internal_event_window(iev);
   out_ev->window = w ? w->opaque() : nullptr;
+  out_ev->sequence = cgfx::internal_event_sequence(iev);
 
   std::visit(
       [out_ev](const auto &body) noexcept {
@@ -73,6 +74,54 @@ void internal_event_to_out(const cgfx::InternalEvent &iev,
         }
       },
       iev.body);
+}
+
+bool dequeue_event_copy_payload_try(cgfx::CgfxContext *ctx_impl,
+                                    cgfx::InternalEvent &iev,
+                                    cgfx_event_type *type,
+                                    cgfx_window **window_handle,
+                                    void *event_payload_bytes,
+                                    size_t payload_capacity,
+                                    size_t *out_payload_used,
+                                    uint64_t *out_sequence_optional) noexcept {
+  if (out_payload_used) {
+    *out_payload_used = 0;
+  }
+
+  if (!ctx_impl->pop_event(iev)) {
+    return false;
+  }
+
+  if (out_sequence_optional) {
+    *out_sequence_optional = cgfx::internal_event_sequence(iev);
+  }
+
+  const size_t needed = cgfx::internal_event_payload_byte_size(iev);
+
+  if (out_payload_used) {
+    *out_payload_used = needed;
+  }
+
+  if (event_payload_bytes) {
+    if (payload_capacity < needed) {
+      ctx_impl->push_priority_event_front(iev);
+      if (out_payload_used) {
+        *out_payload_used = 0;
+      }
+      if (out_sequence_optional) {
+        *out_sequence_optional = 0;
+      }
+      return false;
+    }
+
+    cgfx::internal_event_copy_payload_bytes(iev, event_payload_bytes);
+  }
+
+  *type = cgfx::internal_event_kind(iev);
+  cgfx::CgfxWindow *w = cgfx::internal_event_window(iev);
+  *window_handle = w ? w->opaque() : nullptr;
+
+  return true;
 }
 
 } // namespace
@@ -165,47 +214,56 @@ cgfx_result cgfx_poll_events(cgfx_context *context) {
   return CGFX_OK;
 }
 
+void cgfx_context_set_input_routing_trace_enabled(cgfx_context *context,
+                                                  bool enabled) {
+  if (!context) {
+    return;
+  }
+  cgfx::CgfxContext::from_opaque(context)
+      ->set_input_routing_trace_enabled(enabled);
+}
+
+bool cgfx_context_get_input_routing_trace_enabled(const cgfx_context *context) {
+  if (!context) {
+    return false;
+  }
+  return cgfx::CgfxContext::from_opaque(const_cast<cgfx_context *>(context))
+      ->input_routing_trace_enabled();
+}
+
 bool cgfx_next_event(cgfx_context *context, cgfx_event_type *type,
-                     cgfx_window **window, void *event_payload_bytes,
+                     cgfx_window **window_handle, void *event_payload_bytes,
                      size_t payload_capacity, size_t *out_payload_used) {
-  if (!context || !type || !window) {
+  if (!context || !type || !window_handle) {
     return false;
   }
 
-  if (out_payload_used) {
-    *out_payload_used = 0;
+  cgfx::CgfxContext *ctx_impl = cgfx::CgfxContext::from_opaque(context);
+  cgfx::InternalEvent iev{};
+  return dequeue_event_copy_payload_try(ctx_impl, iev, type, window_handle,
+                                        event_payload_bytes, payload_capacity,
+                                        out_payload_used, nullptr);
+}
+
+bool cgfx_next_event_with_sequence(cgfx_context *context, cgfx_event_type *type,
+                                   cgfx_window **window_handle,
+                                   void *event_payload_bytes,
+                                   size_t payload_capacity,
+                                   size_t *out_payload_used,
+                                   uint64_t *out_sequence) {
+  if (!context || !type || !window_handle) {
+    return false;
   }
 
   cgfx::CgfxContext *ctx_impl = cgfx::CgfxContext::from_opaque(context);
 
   cgfx::InternalEvent iev{};
-  if (!ctx_impl->pop_event(iev)) {
-    return false;
+  if (out_sequence) {
+    *out_sequence = 0;
   }
-
-  const size_t needed = cgfx::internal_event_payload_byte_size(iev);
-
-  if (out_payload_used) {
-    *out_payload_used = needed;
-  }
-
-  if (event_payload_bytes) {
-    if (payload_capacity < needed) {
-      ctx_impl->push_priority_event_front(iev);
-      if (out_payload_used) {
-        *out_payload_used = 0;
-      }
-      return false;
-    }
-
-    cgfx::internal_event_copy_payload_bytes(iev, event_payload_bytes);
-  }
-
-  *type = cgfx::internal_event_kind(iev);
-  cgfx::CgfxWindow *w = cgfx::internal_event_window(iev);
-  *window = w ? w->opaque() : nullptr;
-
-  return true;
+  return dequeue_event_copy_payload_try(ctx_impl, iev, type, window_handle,
+                                        event_payload_bytes, payload_capacity,
+                                        out_payload_used, out_sequence);
 }
 
 size_t cgfx_event_payload_byte_size(cgfx_event_type type) {

@@ -33,9 +33,11 @@ using EventBody =
     std::variant<EventClose, EventResize, EventMouseMove, EventMouseButton,
                  EventKey>;
 
-/** Typed platform event before C API serialization (variant payload + window). */
+/** Typed platform event before C API serialization (variant payload + window).
+ *  @p sequence assigned by EventQueue enqueue (0 until first queue admission). */
 struct InternalEvent {
   CgfxWindow *window{};
+  uint64_t sequence{};
   EventBody body{};
 
   static InternalEvent close_request(CgfxWindow *w,
@@ -61,5 +63,9 @@ size_t internal_event_payload_byte_size(const InternalEvent &e) noexcept;
 
 /** Copies payload for @p e into @p dst (must hold at least internal_event_payload_byte_size bytes). */
 void internal_event_copy_payload_bytes(const InternalEvent &e, void *dst) noexcept;
+
+inline uint64_t internal_event_sequence(const InternalEvent &e) noexcept {
+  return e.sequence;
+}
 
 } // namespace cgfx

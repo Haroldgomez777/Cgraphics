@@ -185,6 +185,10 @@ typedef struct cgfx_event {
     cgfx_event_mouse_button_payload mouse_button;
     cgfx_event_key_payload key;
   } payload;
+  /** Per-context enqueue order assigned when the event is admitted to the
+   *  queue (starts at 1). Use together with dequeue order for correlation;
+   *  `priority_front` retries preserve an existing non-zero sequence. */
+  uint64_t sequence;
 } cgfx_event;
 
 CGFX_API cgfx_result cgfx_context_create(cgfx_context **out_context);
@@ -209,9 +213,27 @@ CGFX_API cgfx_input_propagation_policy
 cgfx_window_get_input_propagation_policy(const cgfx_window *window);
 
 CGFX_API cgfx_result cgfx_poll_events(cgfx_context *context);
+
+/** When true, each propagated pointer/button or key enqueue prints one stderr
+ * line (default false — no overhead otherwise). Correlates with `cgfx_event.sequence`. */
+CGFX_API void cgfx_context_set_input_routing_trace_enabled(cgfx_context *context,
+                                                              bool enabled);
+CGFX_API bool cgfx_context_get_input_routing_trace_enabled(
+    const cgfx_context *context);
+
 CGFX_API bool cgfx_next_event(cgfx_context *context, cgfx_event_type *type,
                                cgfx_window **window_handle, void *event_payload,
                                size_t payload_capacity, size_t *out_payload_used);
+
+/** Like `cgfx_next_event`; when @p out_sequence is non-NULL and dequeue
+ * succeeds, writes the admitted queue sequence (`cgfx_event.sequence`). */
+CGFX_API bool cgfx_next_event_with_sequence(cgfx_context *context,
+                                            cgfx_event_type *type,
+                                            cgfx_window **window_handle,
+                                            void *event_payload,
+                                            size_t payload_capacity,
+                                            size_t *out_payload_used,
+                                            uint64_t *out_sequence);
 
 /** Convenience dequeue that fills `cgfx_event`. */
 CGFX_API bool cgfx_next_event_into(cgfx_context *context,

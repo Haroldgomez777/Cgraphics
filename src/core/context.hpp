@@ -55,11 +55,24 @@ public:
     default_propagation_policy_ = policy;
   }
 
+  void set_input_routing_trace_enabled(bool enabled) noexcept {
+    input_routing_trace_enabled_ = enabled;
+  }
+
+  bool input_routing_trace_enabled() const noexcept {
+    return input_routing_trace_enabled_;
+  }
+
+  uint64_t last_enqueued_event_sequence() const noexcept {
+    return event_queue_.last_enqueued_sequence();
+  }
+
 private:
   std::unique_ptr<PlatformBackend> backend_{};
   EventQueue event_queue_{};
   cgfx_input_propagation_policy default_propagation_policy_{
       CGFX_INPUT_PROPAGATION_TARGET_ONLY};
+  bool input_routing_trace_enabled_{false};
 };
 
 } // namespace cgfx

@@ -52,6 +52,12 @@ public:
   }
   void reset_resize_coalesce_stats() noexcept { resize_coalesce_hits_ = 0; }
 
+  /** Sequence id of the last event admitted to the queue (push or priority
+   *  re-admit with a newly assigned id). 0 until the first admission. */
+  uint64_t last_enqueued_sequence() const noexcept {
+    return last_enqueued_sequence_;
+  }
+
 private:
   bool try_resize_coalesce_in_place_(const InternalEvent &incoming);
 
@@ -65,6 +71,8 @@ private:
 
   uint64_t dropped_events_{0};
   uint64_t resize_coalesce_hits_{0};
+  uint64_t next_sequence_{0};
+  uint64_t last_enqueued_sequence_{0};
 };
 
 } // namespace cgfx
