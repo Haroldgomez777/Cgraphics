@@ -39,19 +39,16 @@ cgfx_result CgfxContext::create(std::unique_ptr<CgfxContext> &out) {
   }
 }
 
-void CgfxContext::push_event(const QueuedEvent &ev) { events_.push_back(ev); }
-
-void CgfxContext::push_priority_event_front(const QueuedEvent &ev) {
-  events_.push_front(ev);
+void CgfxContext::enqueue_event(InternalEvent ev) {
+  event_queue_.push(std::move(ev));
 }
 
-bool CgfxContext::pop_event(QueuedEvent &ev) {
-  if (events_.empty()) {
-    return false;
-  }
-  ev = events_.front();
-  events_.pop_front();
-  return true;
+void CgfxContext::push_priority_event_front(const InternalEvent &ev) {
+  event_queue_.push_priority_front(ev);
+}
+
+bool CgfxContext::pop_event(InternalEvent &ev) {
+  return event_queue_.pop(ev);
 }
 
 void CgfxContext::poll_events_impl() {
@@ -61,7 +58,7 @@ void CgfxContext::poll_events_impl() {
 }
 
 cgfx_result CgfxContext::create_window_impl(const cgfx_window_desc *desc,
-                                            cgfx_window **out_window) {
+                                             cgfx_window **out_window) {
   if (!desc || !out_window) {
     return CGFX_ERROR_INVALID_ARGUMENT;
   }

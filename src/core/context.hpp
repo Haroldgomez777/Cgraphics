@@ -2,23 +2,14 @@
 
 #include <cgfx/cgfx_api.h>
 
-#include <deque>
+#include "core/events/event_queue.hpp"
+
 #include <memory>
 
 namespace cgfx {
 
 class PlatformBackend;
 class CgfxWindow;
-
-struct QueuedEvent {
-  cgfx_event_type type{};
-  CgfxWindow *window{};
-  cgfx_event_resize_payload resize{};
-  cgfx_event_mouse_move_payload move{};
-  cgfx_event_mouse_button_payload mb{};
-  cgfx_event_key_payload key{};
-  cgfx_event_close_payload close{};
-};
 
 class CgfxContext {
 public:
@@ -41,19 +32,23 @@ public:
 
   void destroy_window_impl(CgfxWindow *wnd);
 
-  void push_event(const QueuedEvent &ev);
-  bool pop_event(QueuedEvent &ev);
+  void enqueue_event(InternalEvent ev);
+
+  /** @see cgfx_next_event undersized-buffer retry path */
+  void push_priority_event_front(const InternalEvent &ev);
+
+  bool pop_event(InternalEvent &ev);
 
   void poll_events_impl();
 
   PlatformBackend *platform_backend() { return backend_.get(); }
 
-  void push_priority_event_front(const QueuedEvent &ev);
+  EventQueue &mutable_event_queue() noexcept { return event_queue_; }
+  const EventQueue &event_queue() const noexcept { return event_queue_; }
 
 private:
   std::unique_ptr<PlatformBackend> backend_{};
-  std::deque<QueuedEvent> events_{};
+  EventQueue event_queue_{};
 };
 
 } // namespace cgfx
-

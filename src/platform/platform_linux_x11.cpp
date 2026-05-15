@@ -1,4 +1,5 @@
 #include "core/context.hpp"
+#include "core/events/event_dispatch.hpp"
 #include "core/window_impl.hpp"
 
 #include <GL/gl.h>
@@ -230,12 +231,12 @@ void X11Surface::refresh_geometry_from_server() noexcept {
 }
 
 void X11Surface::enqueue_resize_event() noexcept {
-  QueuedEvent ev{};
-  ev.type = CGFX_EVENT_RESIZE;
-  ev.window = owner();
-  ev.resize.width = static_cast<uint32_t>((client_w_ < 1) ? 1 : client_w_);
-  ev.resize.height = static_cast<uint32_t>((client_h_ < 1) ? 1 : client_h_);
-  owner()->context().push_event(ev);
+  const uint32_t w =
+      static_cast<uint32_t>((client_w_ < 1) ? 1 : client_w_);
+  const uint32_t h =
+      static_cast<uint32_t>((client_h_ < 1) ? 1 : client_h_);
+  CgfxWindow *wnd = owner();
+  event_dispatch_resize(wnd->context(), wnd, w, h);
 }
 
 cgfx_result X11Surface::initialize(const cgfx_window_desc *desc) {
@@ -359,48 +360,36 @@ void X11Surface::dispatch_event(const XEvent &evt) noexcept {
     if (evt.xclient.format == 32 &&
         evt.xclient.message_type == backend_->protocols_atom() &&
         static_cast<Atom>(evt.xclient.data.l[0]) == backend_->delete_atom()) {
-      QueuedEvent ev{};
-      ev.type = CGFX_EVENT_CLOSE_REQUEST;
-      ev.window = owner();
-      ev.close.unused = 0;
-      owner()->context().push_event(ev);
+      CgfxWindow *wnd = owner();
+      event_dispatch_close(wnd->context(), wnd);
     }
     return;
 
   case MotionNotify: {
-    QueuedEvent ev{};
-    ev.type = CGFX_EVENT_MOUSE_MOVE;
-    ev.window = owner();
-    ev.move.x = evt.xmotion.x;
-    ev.move.y = evt.xmotion.y;
-    owner()->context().push_event(ev);
+    CgfxWindow *wnd = owner();
+    event_dispatch_mouse_move(wnd->context(), wnd, evt.xmotion.x,
+                               evt.xmotion.y);
     return;
   }
 
   case ButtonPress:
   case ButtonRelease: {
-    QueuedEvent ev{};
-    ev.type = CGFX_EVENT_MOUSE_BUTTON;
-    ev.window = owner();
-    ev.mb.button = MapButton(static_cast<unsigned int>(evt.xbutton.button));
-    ev.mb.action = (evt.type == ButtonPress) ? CGFX_PRESS : CGFX_RELEASE;
-    ev.mb.x = evt.xbutton.x;
-    ev.mb.y = evt.xbutton.y;
-    owner()->context().push_event(ev);
+    CgfxWindow *wnd = owner();
+    event_dispatch_mouse_button(
+        wnd->context(), wnd,
+        MapButton(static_cast<unsigned int>(evt.xbutton.button)),
+        (evt.type == ButtonPress) ? CGFX_PRESS : CGFX_RELEASE, evt.xbutton.x,
+        evt.xbutton.y);
     return;
   }
 
   case KeyPress:
   case KeyRelease: {
-    QueuedEvent ev{};
-    ev.type = CGFX_EVENT_KEY;
-    ev.window = owner();
+    CgfxWindow *wnd = owner();
     KeySym ks = XLookupKeysym(&(const_cast<XEvent &>(evt)).xkey, 0);
-    ev.key.key = MapKeysym(ks);
-    ev.key.native_code = static_cast<uint32_t>(ks);
-    ev.key.action = (evt.type == KeyPress) ? CGFX_PRESS : CGFX_RELEASE;
-    ev.key.repeat = 0;
-    owner()->context().push_event(ev);
+    event_dispatch_key(
+        wnd->context(), wnd, MapKeysym(ks), static_cast<uint32_t>(ks),
+        (evt.type == KeyPress) ? CGFX_PRESS : CGFX_RELEASE, 0);
     return;
   }
 

@@ -1,12 +1,29 @@
 #include "render/render_command_list.hpp"
 
+#include <cstddef>
 #include <cstring>
 #include <limits>
 #include <new>
+#include <type_traits>
 
 namespace cgfx {
 
 namespace {
+
+using CAbiRect = cgfx_surface_fill_rect_item;
+
+static_assert(std::is_standard_layout<CAbiRect>::value);
+static_assert(std::is_standard_layout<RenderFillRectItem>::value);
+static_assert(sizeof(CAbiRect) == sizeof(RenderFillRectItem));
+static_assert(alignof(CAbiRect) == alignof(RenderFillRectItem));
+static_assert(offsetof(CAbiRect, x_px) == offsetof(RenderFillRectItem, x_px));
+static_assert(offsetof(CAbiRect, y_px) == offsetof(RenderFillRectItem, y_px));
+static_assert(offsetof(CAbiRect, width_px) == offsetof(RenderFillRectItem, width_px));
+static_assert(offsetof(CAbiRect, height_px) == offsetof(RenderFillRectItem, height_px));
+static_assert(offsetof(CAbiRect, r) == offsetof(RenderFillRectItem, red));
+static_assert(offsetof(CAbiRect, g) == offsetof(RenderFillRectItem, green));
+static_assert(offsetof(CAbiRect, b) == offsetof(RenderFillRectItem, blue));
+static_assert(offsetof(CAbiRect, a) == offsetof(RenderFillRectItem, alpha));
 
 bool rect_item_valid(const RenderFillRectItem &item) noexcept {
   return item.width_px != 0U && item.height_px != 0U;
@@ -143,6 +160,12 @@ cgfx_result RenderCommandList::append_fill_rect_batch_interleaved(
       stride >
           (std::numeric_limits<size_t>::max() /
            static_cast<size_t>(item_count - 1U))) {
+    return CGFX_ERROR_INVALID_ARGUMENT;
+  }
+
+  const size_t last_row_offset =
+      item_count <= 1U ? 0U : (item_count - 1U) * stride;
+  if (last_row_offset > std::numeric_limits<size_t>::max() - k_layout_span) {
     return CGFX_ERROR_INVALID_ARGUMENT;
   }
 

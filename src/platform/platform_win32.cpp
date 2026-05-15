@@ -6,6 +6,7 @@
 #endif
 
 #include "core/context.hpp"
+#include "core/events/event_dispatch.hpp"
 #include "core/window_impl.hpp"
 
 #include <windows.h>
@@ -98,19 +99,6 @@ static std::wstring Utf8ToWide(const char *maybe_utf8) {
 }
 
 static LPCWSTR WindowClassName() noexcept { return L"cgfx_win32_phase1"; }
-
-static QueuedEvent MakeResizeEvent(CgfxWindow *owner,
-                                    const RECT &client) noexcept {
-  QueuedEvent ev{};
-  ev.type = CGFX_EVENT_RESIZE;
-  ev.window = owner;
-
-  const LONG w_px = client.right - client.left;
-  const LONG h_px = client.bottom - client.top;
-  ev.resize.width = static_cast<uint32_t>(std::max<LONG>(w_px, 1));
-  ev.resize.height = static_cast<uint32_t>(std::max<LONG>(h_px, 1));
-  return ev;
-}
 
 static cgfx_mouse_button DecodeMouseButton(UINT msg,
                                            WPARAM wparam) noexcept {
@@ -311,21 +299,15 @@ public:
     }
 
     case WM_CLOSE: {
-      QueuedEvent ev{};
-      ev.type = CGFX_EVENT_CLOSE_REQUEST;
-      ev.window = surface->owner();
-      ev.close.unused = 0;
-      surface->owner()->context().push_event(ev);
+      CgfxWindow *wnd = surface->owner();
+      event_dispatch_close(wnd->context(), wnd);
       return 0;
     }
 
     case WM_MOUSEMOVE: {
-      QueuedEvent ev{};
-      ev.type = CGFX_EVENT_MOUSE_MOVE;
-      ev.window = surface->owner();
-      ev.move.x = GET_X_LPARAM(lparam);
-      ev.move.y = GET_Y_LPARAM(lparam);
-      surface->owner()->context().push_event(ev);
+      CgfxWindow *wnd = surface->owner();
+      event_dispatch_mouse_move(wnd->context(), wnd, GET_X_LPARAM(lparam),
+                                GET_Y_LPARAM(lparam));
       break;
     }
 
@@ -341,14 +323,11 @@ public:
     case WM_RBUTTONUP:
     case WM_MBUTTONUP:
     case WM_XBUTTONUP: {
-      QueuedEvent ev{};
-      ev.type = CGFX_EVENT_MOUSE_BUTTON;
-      ev.window = surface->owner();
-      ev.mb.button = DecodeMouseButton(msg, wparam);
-      ev.mb.action = DecodeMouseAction(msg);
-      ev.mb.x = GET_X_LPARAM(lparam);
-      ev.mb.y = GET_Y_LPARAM(lparam);
-      surface->owner()->context().push_event(ev);
+      CgfxWindow *wnd = surface->owner();
+      event_dispatch_mouse_button(wnd->context(), wnd,
+                               DecodeMouseButton(msg, wparam),
+                               DecodeMouseAction(msg),
+                               GET_X_LPARAM(lparam), GET_Y_LPARAM(lparam));
       break;
     }
 
@@ -361,15 +340,10 @@ public:
 
       const cgfx_input_action action = DecodeKeyboardAction(msg, lparam);
 
-      QueuedEvent ev{};
-      ev.type = CGFX_EVENT_KEY;
-      ev.window = surface->owner();
-      ev.key.native_code = vk;
-      ev.key.key = MapVirtualKey(vk, lparam);
-      ev.key.action = action;
-      ev.key.repeat = (action == CGFX_REPEAT) ? 1 : 0;
-
-      surface->owner()->context().push_event(ev);
+      CgfxWindow *wnd = surface->owner();
+      event_dispatch_key(wnd->context(), wnd, MapVirtualKey(vk, lparam),
+                        static_cast<uint32_t>(vk), action,
+                         (action == CGFX_REPEAT) ? 1 : 0);
       break;
     }
 
@@ -595,8 +569,16 @@ private:
 
   void EnqueueResize(const RECT &client) noexcept {
     UpdateClientExtents(client);
-    QueuedEvent ev = MakeResizeEvent(owner(), client);
-    owner()->context().push_event(ev);
+
+    const LONG w_px = client.right - client.left;
+    const LONG h_px = client.bottom - client.top;
+    const uint32_t w =
+        static_cast<uint32_t>(std::max<LONG>(w_px, static_cast<LONG>(1)));
+    const uint32_t h =
+        static_cast<uint32_t>(std::max<LONG>(h_px, static_cast<LONG>(1)));
+
+    CgfxWindow *wnd = owner();
+    event_dispatch_resize(wnd->context(), wnd, w, h);
   }
 
   bool owns_resources_{false};

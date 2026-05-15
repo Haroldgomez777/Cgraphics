@@ -120,6 +120,46 @@ typedef enum cgfx_key {
   CGFX_KEY_Z,
 } cgfx_key;
 
+typedef struct cgfx_event_resize_payload {
+  uint32_t width;
+  uint32_t height;
+} cgfx_event_resize_payload;
+
+typedef struct cgfx_event_mouse_move_payload {
+  int32_t x;
+  int32_t y;
+} cgfx_event_mouse_move_payload;
+
+typedef struct cgfx_event_mouse_button_payload {
+  cgfx_mouse_button button;
+  cgfx_input_action action;
+  int32_t x;
+  int32_t y;
+} cgfx_event_mouse_button_payload;
+
+typedef struct cgfx_event_key_payload {
+  cgfx_key key;
+  uint32_t native_code;
+  cgfx_input_action action;
+  int repeat;
+} cgfx_event_key_payload;
+
+typedef struct cgfx_event_close_payload {
+  int unused;
+} cgfx_event_close_payload;
+
+typedef struct cgfx_event {
+  cgfx_event_type type;
+  cgfx_window *window;
+  union {
+    cgfx_event_close_payload close;
+    cgfx_event_resize_payload resize;
+    cgfx_event_mouse_move_payload mouse_move;
+    cgfx_event_mouse_button_payload mouse_button;
+    cgfx_event_key_payload key;
+  } payload;
+} cgfx_event;
+
 CGFX_API cgfx_result cgfx_context_create(cgfx_context **out_context);
 CGFX_API void cgfx_context_destroy(cgfx_context *context);
 
@@ -132,6 +172,38 @@ CGFX_API cgfx_result cgfx_poll_events(cgfx_context *context);
 CGFX_API bool cgfx_next_event(cgfx_context *context, cgfx_event_type *type,
                                cgfx_window **window_handle, void *event_payload,
                                size_t payload_capacity, size_t *out_payload_used);
+
+/** Convenience dequeue that fills `cgfx_event`. */
+CGFX_API bool cgfx_next_event_into(cgfx_context *context,
+                                    cgfx_event *out_event);
+
+/** Byte size for the canonical payload blob for @p type (0 if unknown). */
+CGFX_API size_t cgfx_event_payload_byte_size(cgfx_event_type type);
+
+typedef enum cgfx_event_queue_overflow_policy {
+  /** Incoming events are discarded while the queue is at capacity */
+  CGFX_EVENT_QUEUE_OVERFLOW_DROP_NEWEST = 0,
+  /** Oldest events are discarded to make space for newcomers */
+  CGFX_EVENT_QUEUE_OVERFLOW_DROP_OLDEST = 1,
+} cgfx_event_queue_overflow_policy;
+
+/** @param max_pending_events Use 0 for the compile-time default (~4k slots). */
+CGFX_API cgfx_result cgfx_context_set_event_queue_limits(
+    cgfx_context *context, size_t max_pending_events,
+    cgfx_event_queue_overflow_policy overflow_policy);
+
+CGFX_API cgfx_result cgfx_context_get_event_queue_limits(
+    const cgfx_context *context, size_t *out_max_pending,
+    cgfx_event_queue_overflow_policy *out_overflow_policy);
+
+/** When enabled, successive resize payloads for the same window coalesce into one slot. */
+CGFX_API void cgfx_context_set_event_resize_coalesce(cgfx_context *context,
+                                                       bool enabled);
+CGFX_API bool cgfx_context_get_event_resize_coalesce(const cgfx_context *context);
+
+/** Monotonic drops since last reset (lost due to overflow or drop-newest). */
+CGFX_API uint64_t cgfx_context_event_queue_drop_count(const cgfx_context *context);
+CGFX_API void cgfx_context_event_queue_reset_drop_count(cgfx_context *context);
 
 CGFX_API cgfx_result cgfx_window_begin_present_pass(cgfx_window *window,
                                                     uint32_t *out_width_px,
@@ -161,46 +233,22 @@ typedef struct cgfx_surface_fill_rect_item {
 /** Filled rects in framebuffer pixel coordinates; colors are normalized RGBA.
  *  Items are concatenated into a single backend batch for the frame pass.
  *
- *   @param stride_bytes Distance between successive `cgfx_surface_fill_rect_item`.
- *                       Use `0` for `sizeof(cgfx_surface_fill_rect_item)`. Must be at
- *                       least `sizeof(cgfx_surface_fill_rect_item)`. */
+ *   @param items Pointer to packed rows unless @p stride_bytes is larger than
+ *                `sizeof(cgfx_surface_fill_rect_item)`; aligned for the field types.
+ *
+ *   @param stride_bytes Byte distance between successive row starts (item 0, then
+ *                       item 1, ...). Pass `0` for `sizeof(cgfx_surface_fill_rect_item)`.
+ *                       Must be at least that size when non-zero (and must satisfy
+ *                       `(item_count-1)*stride + sizeof(record)` stays representable).
+ */
 CGFX_API cgfx_result cgfx_surface_fill_rect_batch_pixels(
-    cgfx_window *window,
-    const cgfx_surface_fill_rect_item *items, size_t item_count,
+    cgfx_window *window, const void *items, size_t item_count,
     size_t stride_bytes);
 CGFX_API cgfx_result cgfx_window_get_size_pixels(const cgfx_window *window,
                                                  uint32_t *out_width,
                                                  uint32_t *out_height);
 CGFX_API cgfx_result cgfx_window_get_dpi_scale(const cgfx_window *window,
                                                float *out_scale);
-
-typedef struct cgfx_event_resize_payload {
-  uint32_t width;
-  uint32_t height;
-} cgfx_event_resize_payload;
-
-typedef struct cgfx_event_mouse_move_payload {
-  int32_t x;
-  int32_t y;
-} cgfx_event_mouse_move_payload;
-
-typedef struct cgfx_event_mouse_button_payload {
-  cgfx_mouse_button button;
-  cgfx_input_action action;
-  int32_t x;
-  int32_t y;
-} cgfx_event_mouse_button_payload;
-
-typedef struct cgfx_event_key_payload {
-  cgfx_key key;
-  uint32_t native_code;
-  cgfx_input_action action;
-  int repeat;
-} cgfx_event_key_payload;
-
-typedef struct cgfx_event_close_payload {
-  int unused;
-} cgfx_event_close_payload;
 
 #ifdef __cplusplus
 }

@@ -1,4 +1,4 @@
-# cgfx (Phase 2)
+# cgfx (Phase 2 + Phase 3 events)
 
 `cgfx` is a cross-platform GUI graphics framework in C/C++.
 
@@ -10,6 +10,34 @@ Phase 1 includes:
 - Minimal C API and smoke test
 
 Phase 2 adds incremental render-command recording for the present pass (clear, filled rectangles including a batched path).
+
+Phase 3 hardens **event ingestion and delivery**:
+
+- Typed internal representation (`InternalEvent`) with centralized **dispatch enqueue** helpers used by Win32/X11 backends (no duplicated queue wiring).
+- `EventQueue` with explicit **ordering (FIFO)**; **capacity** (~4 096 pending slots by default, configurable); **resize coalescing** for the same window (successive resize storms collapse to the latest payload in one queue slot).
+- Overflow policy: **`CGFX_EVENT_QUEUE_OVERFLOW_DROP_OLDEST`** (default) frees the stalest event before accepting a newcomer, or **`CGFX_EVENT_QUEUE_OVERFLOW_DROP_NEWEST`** to keep the backlog and reject bursts; both increment **`cgfx_context_event_queue_drop_count`** for observability.
+
+### Phase 3: using events from C
+
+Backward compatible **`cgfx_poll_events`** + **`cgfx_next_event`** behave as before (`event_payload_bytes` sizing is described by **`cgfx_event_payload_byte_size(type)`**).
+
+New helper **`cgfx_next_event_into`** returns a **`cgfx_event`** struct (typed union keyed by **`type`**), avoiding manual `memcpy` layout handling when you control the codebase.
+
+Tune the queue early (before heavy input) if needed:
+
+```c
+cgfx_context_set_event_queue_limits(ctx,
+    256 /* 0 restores default */,
+    CGFX_EVENT_QUEUE_OVERFLOW_DROP_OLDEST);
+cgfx_context_set_event_resize_coalesce(ctx, true);
+```
+
+**`cgfx_next_event`** still re-queues undelivered events at the head when the caller buffer is too small (parity with Phase 1).
+
+### Phase 3: tests
+
+- `cgfx_minimal_shutdown` — library smoke load.
+- **`cgfx_event_queue_test`** — ordering, resize coalesce, DROP_OLDEST / DROP_NEWEST (no window or GPU required).
 
 ## Prerequisites
 
@@ -89,6 +117,7 @@ Stride notes:
 
 - `stride_bytes >= sizeof(cgfx_surface_fill_rect_item)` (or pass `0` to use exactly that size).
 - Rows may embed extra trailing padding/strides commonly used when batch data lives in richer engine structs—the first **`sizeof(cgfx_surface_fill_rect_item)`** bytes of each row must mirror the canonical layout (**x**, **y**, **width**, **height**, tightly followed by **`r,g,b,a`** floats).
+- `items` is a `const void *` row pointer (`cgfx_surface_fill_rect_item*` is fine when rows are densely packed).
 
 ## Test
 
@@ -100,9 +129,9 @@ Notes:
 - The `-C Release` flag is primarily relevant for multi-config generators (for example, Visual Studio).
 - For single-config generators (Ninja/Make), this command still works with the existing build directory.
 
-## Baseline Verification (Phase 2)
+## Baseline Verification (Phase 2–3)
 
-Phase 1 baseline is considered stable when all of these pass:
+The library baseline is considered stable when all of these pass:
 - Configure: `cmake --preset windows-mingw-debug` (or equivalent platform preset)
 - Build: `cmake --build --preset build-windows-mingw-debug`
 - Tests: `ctest --preset test-windows-mingw-debug`
@@ -115,4 +144,4 @@ Phase 1 baseline is considered stable when all of these pass:
 - `src/platform/` - Win32/X11 platform backends
 - `src/render/` - minimal OpenGL surface/present helpers
 - `examples/` - demo app
-- `tests/` - smoke tests
+- `tests/` - smoke tests + Phase 3 `event_queue` unit test

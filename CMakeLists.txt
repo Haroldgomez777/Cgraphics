@@ -15,6 +15,9 @@ set(CGFX_PUBLIC_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/include")
 add_library(cgfx SHARED
   src/api/cgfx_api.cpp
   src/core/context.cpp
+  src/core/events/internal_event.cpp
+  src/core/events/event_queue.cpp
+  src/core/events/event_dispatch.cpp
   src/core/window_impl.cpp
   src/render/render_command_list.cpp
   src/render/render_gl_device.cpp
@@ -69,4 +72,19 @@ if(CGFX_BUILD_TESTS)
   add_executable(cgfx_minimal_shutdown tests/minimal_shutdown.c)
   target_link_libraries(cgfx_minimal_shutdown PRIVATE cgfx)
   add_test(NAME cgfx_minimal_shutdown COMMAND cgfx_minimal_shutdown)
+
+  add_executable(cgfx_event_queue_test tests/event_queue_test.cpp
+      src/core/events/event_queue.cpp
+      src/core/events/internal_event.cpp
+  )
+  target_include_directories(cgfx_event_queue_test PRIVATE
+      "${CMAKE_CURRENT_SOURCE_DIR}/src"
+      "${CMAKE_CURRENT_SOURCE_DIR}/include"
+  )
+  set_target_properties(cgfx_event_queue_test PROPERTIES
+      CXX_STANDARD 17
+      CXX_EXTENSIONS OFF)
+  target_compile_options(cgfx_event_queue_test PRIVATE
+      $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall -Wextra -Wpedantic>)
+  add_test(NAME cgfx_event_queue_test COMMAND cgfx_event_queue_test)
 endif()

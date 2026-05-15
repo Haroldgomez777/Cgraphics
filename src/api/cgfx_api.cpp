@@ -1,10 +1,13 @@
 #include <cgfx/cgfx_api.h>
 
 #include "core/context.hpp"
+#include "core/events/internal_event.hpp"
 #include "core/window_impl.hpp"
 
 #include <cstring>
 #include <memory>
+#include <type_traits>
+#include <variant>
 
 namespace {
 
@@ -23,6 +26,53 @@ size_t payload_bytes_for_type(cgfx_event_type type) noexcept {
   default:
     return 0;
   }
+}
+
+cgfx::EventQueueOverflowPolicy to_internal_overflow(
+    cgfx_event_queue_overflow_policy p) noexcept {
+  switch (p) {
+  case CGFX_EVENT_QUEUE_OVERFLOW_DROP_NEWEST:
+    return cgfx::EventQueueOverflowPolicy::DropNewest;
+  case CGFX_EVENT_QUEUE_OVERFLOW_DROP_OLDEST:
+    return cgfx::EventQueueOverflowPolicy::DropOldest;
+  default:
+    return cgfx::EventQueueOverflowPolicy::DropOldest;
+  }
+}
+
+cgfx_event_queue_overflow_policy to_c_overflow(
+    cgfx::EventQueueOverflowPolicy p) noexcept {
+  switch (p) {
+  case cgfx::EventQueueOverflowPolicy::DropNewest:
+    return CGFX_EVENT_QUEUE_OVERFLOW_DROP_NEWEST;
+  case cgfx::EventQueueOverflowPolicy::DropOldest:
+  default:
+    return CGFX_EVENT_QUEUE_OVERFLOW_DROP_OLDEST;
+  }
+}
+
+void internal_event_to_out(const cgfx::InternalEvent &iev,
+                           cgfx_event *out_ev) noexcept {
+  out_ev->type = cgfx::internal_event_kind(iev);
+  cgfx::CgfxWindow *w = cgfx::internal_event_window(iev);
+  out_ev->window = w ? w->opaque() : nullptr;
+
+  std::visit(
+      [out_ev](const auto &body) noexcept {
+        using T = std::decay_t<decltype(body)>;
+        if constexpr (std::is_same_v<T, cgfx::EventClose>) {
+          out_ev->payload.close = body.payload;
+        } else if constexpr (std::is_same_v<T, cgfx::EventResize>) {
+          out_ev->payload.resize = body.payload;
+        } else if constexpr (std::is_same_v<T, cgfx::EventMouseMove>) {
+          out_ev->payload.mouse_move = body.payload;
+        } else if constexpr (std::is_same_v<T, cgfx::EventMouseButton>) {
+          out_ev->payload.mouse_button = body.payload;
+        } else if constexpr (std::is_same_v<T, cgfx::EventKey>) {
+          out_ev->payload.key = body.payload;
+        }
+      },
+      iev.body);
 }
 
 } // namespace
@@ -92,12 +142,12 @@ bool cgfx_next_event(cgfx_context *context, cgfx_event_type *type,
 
   cgfx::CgfxContext *ctx_impl = cgfx::CgfxContext::from_opaque(context);
 
-  cgfx::QueuedEvent ev{};
-  if (!ctx_impl->pop_event(ev)) {
+  cgfx::InternalEvent iev{};
+  if (!ctx_impl->pop_event(iev)) {
     return false;
   }
 
-  const size_t needed = payload_bytes_for_type(ev.type);
+  const size_t needed = cgfx::internal_event_payload_byte_size(iev);
 
   if (out_payload_used) {
     *out_payload_used = needed;
@@ -105,37 +155,114 @@ bool cgfx_next_event(cgfx_context *context, cgfx_event_type *type,
 
   if (event_payload_bytes) {
     if (payload_capacity < needed) {
-      ctx_impl->push_priority_event_front(ev);
+      ctx_impl->push_priority_event_front(iev);
       if (out_payload_used) {
         *out_payload_used = 0;
       }
       return false;
     }
 
-    switch (ev.type) {
-    case CGFX_EVENT_CLOSE_REQUEST:
-      std::memcpy(event_payload_bytes, &ev.close, sizeof(ev.close));
-      break;
-    case CGFX_EVENT_RESIZE:
-      std::memcpy(event_payload_bytes, &ev.resize, sizeof(ev.resize));
-      break;
-    case CGFX_EVENT_MOUSE_MOVE:
-      std::memcpy(event_payload_bytes, &ev.move, sizeof(ev.move));
-      break;
-    case CGFX_EVENT_MOUSE_BUTTON:
-      std::memcpy(event_payload_bytes, &ev.mb, sizeof(ev.mb));
-      break;
-    case CGFX_EVENT_KEY:
-      std::memcpy(event_payload_bytes, &ev.key, sizeof(ev.key));
-      break;
-    default:
-      break;
-    }
+    cgfx::internal_event_copy_payload_bytes(iev, event_payload_bytes);
   }
 
-  *type = ev.type;
-  *window = ev.window ? ev.window->opaque() : nullptr;
+  *type = cgfx::internal_event_kind(iev);
+  cgfx::CgfxWindow *w = cgfx::internal_event_window(iev);
+  *window = w ? w->opaque() : nullptr;
 
+  return true;
+}
+
+size_t cgfx_event_payload_byte_size(cgfx_event_type type) {
+  return payload_bytes_for_type(type);
+}
+
+cgfx_result cgfx_context_set_event_queue_limits(
+    cgfx_context *context, size_t max_pending_events,
+    cgfx_event_queue_overflow_policy overflow_policy) {
+  if (!context) {
+    return CGFX_ERROR_INVALID_ARGUMENT;
+  }
+
+  cgfx::EventQueue &q =
+      cgfx::CgfxContext::from_opaque(context)->mutable_event_queue();
+  q.set_overflow_policy(to_internal_overflow(overflow_policy));
+
+  const size_t cap =
+      max_pending_events == 0U
+          ? static_cast<size_t>(cgfx::EventQueue::kDefaultMaxDepth)
+          : max_pending_events;
+
+  q.set_max_depth(cap);
+  return CGFX_OK;
+}
+
+cgfx_result cgfx_context_get_event_queue_limits(
+    const cgfx_context *context, size_t *out_max_pending,
+    cgfx_event_queue_overflow_policy *out_overflow_policy) {
+  if (!context) {
+    return CGFX_ERROR_INVALID_ARGUMENT;
+  }
+  const cgfx::EventQueue &q =
+      cgfx::CgfxContext::from_opaque(const_cast<cgfx_context *>(context))
+          ->event_queue();
+
+  if (out_max_pending) {
+    *out_max_pending = q.max_depth();
+  }
+  if (out_overflow_policy) {
+    *out_overflow_policy = to_c_overflow(q.overflow_policy());
+  }
+  return CGFX_OK;
+}
+
+void cgfx_context_set_event_resize_coalesce(cgfx_context *context,
+                                             bool enabled) {
+  if (!context) {
+    return;
+  }
+  cgfx::CgfxContext::from_opaque(context)
+      ->mutable_event_queue()
+      .set_coalesce_resize(enabled);
+}
+
+bool cgfx_context_get_event_resize_coalesce(const cgfx_context *context) {
+  if (!context) {
+    return true;
+  }
+  return cgfx::CgfxContext::from_opaque(const_cast<cgfx_context *>(context))
+      ->event_queue()
+      .coalesce_resize();
+}
+
+uint64_t cgfx_context_event_queue_drop_count(const cgfx_context *context) {
+  if (!context) {
+    return 0;
+  }
+  return cgfx::CgfxContext::from_opaque(const_cast<cgfx_context *>(context))
+      ->event_queue()
+      .dropped_event_count();
+}
+
+void cgfx_context_event_queue_reset_drop_count(cgfx_context *context) {
+  if (!context) {
+    return;
+  }
+  cgfx::CgfxContext::from_opaque(context)
+      ->mutable_event_queue()
+      .reset_drop_count();
+}
+
+bool cgfx_next_event_into(cgfx_context *context, cgfx_event *out_event) {
+  if (!context || !out_event) {
+    return false;
+  }
+
+  cgfx::InternalEvent iev{};
+  if (!cgfx::CgfxContext::from_opaque(context)->pop_event(iev)) {
+    return false;
+  }
+
+  internal_event_to_out(iev, out_event);
   return true;
 }
 
@@ -180,7 +307,7 @@ cgfx_result cgfx_surface_fill_rect_pixels(cgfx_window *window, int32_t x_px,
 }
 
 cgfx_result cgfx_surface_fill_rect_batch_pixels(cgfx_window *window,
-                                                const cgfx_surface_fill_rect_item *items,
+                                                const void *items,
                                                 size_t item_count,
                                                 size_t stride_bytes) {
   if (!window) {
