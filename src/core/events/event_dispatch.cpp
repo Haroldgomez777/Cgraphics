@@ -1,9 +1,42 @@
 #include "core/events/event_dispatch.hpp"
 
 #include "core/context.hpp"
+#include "core/input_propagation.hpp"
 #include "core/window_impl.hpp"
 
+#include <vector>
+
 namespace cgfx {
+
+namespace {
+
+void enqueue_mouse_button_propagating(CgfxContext &ctx, CgfxWindow *window,
+                                     cgfx_event_mouse_button_payload p) {
+  std::vector<cgfx_widget_id> receivers;
+  build_input_route_receiver_ids(window->widget_tree(), p.target_widget,
+                                 window->input_propagation_policy(), receivers);
+
+  for (cgfx_widget_id routed : receivers) {
+    cgfx_event_mouse_button_payload copy = p;
+    copy.routed_widget = routed;
+    ctx.enqueue_event(InternalEvent::mouse_button(window, copy));
+  }
+}
+
+void enqueue_key_propagating(CgfxContext &ctx, CgfxWindow *window,
+                            cgfx_event_key_payload p) {
+  std::vector<cgfx_widget_id> receivers;
+  build_input_route_receiver_ids(window->widget_tree(), p.target_widget,
+                                 window->input_propagation_policy(), receivers);
+
+  for (cgfx_widget_id routed : receivers) {
+    cgfx_event_key_payload copy = p;
+    copy.routed_widget = routed;
+    ctx.enqueue_event(InternalEvent::key(window, copy));
+  }
+}
+
+} // namespace
 
 void event_dispatch_close(CgfxContext &ctx, CgfxWindow *window) {
   cgfx_event_close_payload p{};
@@ -40,7 +73,7 @@ void event_dispatch_mouse_button(CgfxContext &ctx, CgfxWindow *window,
   p.y = y;
   p.target_widget = CGFX_WIDGET_ID_NONE;
   routing_sync_pick_mouse_button_targets(window, &p);
-  ctx.enqueue_event(InternalEvent::mouse_button(window, p));
+  enqueue_mouse_button_propagating(ctx, window, p);
 }
 
 void event_dispatch_key(CgfxContext &ctx, CgfxWindow *window, cgfx_key key,
@@ -53,7 +86,7 @@ void event_dispatch_key(CgfxContext &ctx, CgfxWindow *window, cgfx_key key,
   p.action = action;
   p.repeat = repeat;
   routing_pick_key_focus_targets(window, &p);
-  ctx.enqueue_event(InternalEvent::key(window, p));
+  enqueue_key_propagating(ctx, window, p);
 }
 
 } // namespace cgfx

@@ -20,6 +20,7 @@ add_library(cgfx SHARED
   src/core/events/internal_event.cpp
   src/core/events/event_queue.cpp
   src/core/events/event_dispatch.cpp
+  src/core/input_propagation.cpp
   src/core/window_impl.cpp
   src/render/render_command_list.cpp
   src/render/render_gl_device.cpp
@@ -104,6 +105,22 @@ if(CGFX_BUILD_TESTS)
   target_compile_options(cgfx_widget_layout_test PRIVATE
       $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall -Wextra -Wpedantic>)
   add_test(NAME cgfx_widget_layout_test COMMAND cgfx_widget_layout_test)
+
+  add_executable(cgfx_input_route_receivers_test tests/input_route_receivers_test.cpp
+      src/core/widget_tree.cpp
+      src/core/input_propagation.cpp
+      src/layout/flex_layout.cpp
+  )
+  target_include_directories(cgfx_input_route_receivers_test PRIVATE
+      "${CMAKE_CURRENT_SOURCE_DIR}/src"
+      "${CMAKE_CURRENT_SOURCE_DIR}/include"
+  )
+  set_target_properties(cgfx_input_route_receivers_test PROPERTIES
+      CXX_STANDARD 17
+      CXX_EXTENSIONS OFF)
+  target_compile_options(cgfx_input_route_receivers_test PRIVATE
+      $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall -Wextra -Wpedantic>)
+  add_test(NAME cgfx_input_route_receivers_test COMMAND cgfx_input_route_receivers_test)
 
   add_executable(cgfx_widget_input_routing_test tests/widget_input_routing_test.cpp
       src/core/widget_tree.cpp

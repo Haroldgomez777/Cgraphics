@@ -46,9 +46,20 @@ public:
   EventQueue &mutable_event_queue() noexcept { return event_queue_; }
   const EventQueue &event_queue() const noexcept { return event_queue_; }
 
+  cgfx_input_propagation_policy default_input_propagation_policy() const noexcept {
+    return default_propagation_policy_;
+  }
+
+  void set_default_input_propagation_policy(
+      cgfx_input_propagation_policy policy) noexcept {
+    default_propagation_policy_ = policy;
+  }
+
 private:
   std::unique_ptr<PlatformBackend> backend_{};
   EventQueue event_queue_{};
+  cgfx_input_propagation_policy default_propagation_policy_{
+      CGFX_INPUT_PROPAGATION_TARGET_ONLY};
 };
 
 } // namespace cgfx

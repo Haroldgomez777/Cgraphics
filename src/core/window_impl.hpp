@@ -94,6 +94,14 @@ public:
 
   void reconcile_focus_after_structure_change() noexcept;
 
+  cgfx_input_propagation_policy input_propagation_policy() const noexcept {
+    return input_propagation_policy_;
+  }
+
+  void set_input_propagation_policy(cgfx_input_propagation_policy policy) noexcept {
+    input_propagation_policy_ = policy;
+  }
+
 private:
   CgfxContext *ctx_{};
   std::unique_ptr<PlatformSurface> surface_{};
@@ -101,6 +109,7 @@ private:
   RenderCommandList command_list_{};
   WidgetTree widget_tree_{};
   cgfx_widget_id focus_widget_id_raw_{CGFX_WIDGET_ID_NONE};
+  cgfx_input_propagation_policy input_propagation_policy_{CGFX_INPUT_PROPAGATION_TARGET_ONLY};
   bool presenting_{false};
 };
 

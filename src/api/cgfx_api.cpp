@@ -99,6 +99,25 @@ void cgfx_context_destroy(cgfx_context *context) {
   delete cgfx::CgfxContext::from_opaque(context);
 }
 
+void cgfx_context_set_default_input_propagation_policy(
+    cgfx_context *context, cgfx_input_propagation_policy policy) {
+  if (!context) {
+    return;
+  }
+  cgfx::CgfxContext::from_opaque(context)
+      ->set_default_input_propagation_policy(policy);
+}
+
+cgfx_input_propagation_policy cgfx_context_get_default_input_propagation_policy(
+    const cgfx_context *context) {
+  if (!context) {
+    return CGFX_INPUT_PROPAGATION_TARGET_ONLY;
+  }
+  return cgfx::CgfxContext::from_opaque(
+             const_cast<cgfx_context *>(context))
+      ->default_input_propagation_policy();
+}
+
 cgfx_result cgfx_window_create(cgfx_context *context,
                                const cgfx_window_desc *desc,
                                cgfx_window **out_window) {
@@ -118,6 +137,23 @@ void cgfx_window_destroy(cgfx_window *window) {
   cgfx::CgfxWindow *wnd = cgfx::CgfxWindow::from_opaque(window);
   cgfx::CgfxContext &owning_context = wnd->context();
   owning_context.destroy_window_impl(wnd);
+}
+
+void cgfx_window_set_input_propagation_policy(
+    cgfx_window *window, cgfx_input_propagation_policy policy) {
+  if (!window) {
+    return;
+  }
+  cgfx::CgfxWindow::from_opaque(window)->set_input_propagation_policy(policy);
+}
+
+cgfx_input_propagation_policy cgfx_window_get_input_propagation_policy(
+    const cgfx_window *window) {
+  if (!window) {
+    return CGFX_INPUT_PROPAGATION_TARGET_ONLY;
+  }
+  return cgfx::CgfxWindow::from_opaque(const_cast<cgfx_window *>(window))
+      ->input_propagation_policy();
 }
 
 cgfx_result cgfx_poll_events(cgfx_context *context) {

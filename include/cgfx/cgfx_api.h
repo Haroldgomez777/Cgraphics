@@ -126,6 +126,16 @@ typedef uint64_t cgfx_widget_id;
 #  define CGFX_WIDGET_ID_NONE UINT64_C(0)
 #endif
 
+/** How pointer / keyboard logical events are expanded into the per-window event queue
+ *  (see `target_widget` / `routed_widget` on relevant payloads). */
+typedef enum cgfx_input_propagation_policy {
+  /** One queue entry per platform input: only the deepest hit / focus widget. */
+  CGFX_INPUT_PROPAGATION_TARGET_ONLY = 0,
+  /** One queue entry per ancestor on the parent chain, inner-to-outer (target, parent,
+   *  …, root). Missed hits (`CGFX_WIDGET_ID_NONE`) still produce a single entry. */
+  CGFX_INPUT_PROPAGATION_BUBBLE_TO_PARENT = 1,
+} cgfx_input_propagation_policy;
+
 typedef struct cgfx_event_resize_payload {
   uint32_t width;
   uint32_t height;
@@ -143,8 +153,11 @@ typedef struct cgfx_event_mouse_button_payload {
   cgfx_input_action action;
   int32_t x;
   int32_t y;
-  /** Phase 4.1: logical hit target; primary click sets keyboard focus here. */
+  /** Deepest logical hit (pointer origin). Unchanged from Phase 4.1. */
   cgfx_widget_id target_widget;
+  /** Widget this queue entry is delivered to: equals `target_widget` in
+   *  `CGFX_INPUT_PROPAGATION_TARGET_ONLY`; walks ancestors when bubbling. */
+  cgfx_widget_id routed_widget;
 } cgfx_event_mouse_button_payload;
 
 typedef struct cgfx_event_key_payload {
@@ -152,8 +165,10 @@ typedef struct cgfx_event_key_payload {
   uint32_t native_code;
   cgfx_input_action action;
   int repeat;
-  /** Phase 4.1: widget receiving keyboard input (focus); target-only routing. */
+  /** Focus widget (keyboard origin). Unchanged from Phase 4.1. */
   cgfx_widget_id target_widget;
+  /** Same semantics as `routed_widget` on mouse button payloads. */
+  cgfx_widget_id routed_widget;
 } cgfx_event_key_payload;
 
 typedef struct cgfx_event_close_payload {
@@ -175,10 +190,23 @@ typedef struct cgfx_event {
 CGFX_API cgfx_result cgfx_context_create(cgfx_context **out_context);
 CGFX_API void cgfx_context_destroy(cgfx_context *context);
 
+/** Default propagation for windows created afterward (existing windows unchanged). */
+CGFX_API void cgfx_context_set_default_input_propagation_policy(
+    cgfx_context *context, cgfx_input_propagation_policy policy);
+CGFX_API cgfx_input_propagation_policy
+cgfx_context_get_default_input_propagation_policy(const cgfx_context *context);
+
 CGFX_API cgfx_result cgfx_window_create(cgfx_context *context,
                                          const cgfx_window_desc *desc,
                                          cgfx_window **out_window);
 CGFX_API void cgfx_window_destroy(cgfx_window *window);
+
+/** Per-window pointer/keyboard queue expansion policy (defaults from context at
+ *  `cgfx_window_create`). */
+CGFX_API void cgfx_window_set_input_propagation_policy(
+    cgfx_window *window, cgfx_input_propagation_policy policy);
+CGFX_API cgfx_input_propagation_policy
+cgfx_window_get_input_propagation_policy(const cgfx_window *window);
 
 CGFX_API cgfx_result cgfx_poll_events(cgfx_context *context);
 CGFX_API bool cgfx_next_event(cgfx_context *context, cgfx_event_type *type,

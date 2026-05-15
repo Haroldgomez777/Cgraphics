@@ -69,6 +69,12 @@ public:
    *  Among siblings drawn on top equals **last** in children order (“last sibling on top”). */
   uint64_t hit_test_logical(int32_t x, int32_t y) const noexcept;
 
+  /** Appends @p leaf, its parent, …, ending at the intrinsic root (**inner-first**).
+   *  If @p leaf is `CGFX_WIDGET_ID_NONE` or not an alive handle, returns without
+   *  appending (does **not** clear @p out_chain). Parent cycles are bounded. */
+  void append_ancestors_leaf_to_root(
+      cgfx_widget_id leaf, std::vector<cgfx_widget_id> &out_chain) const;
+
   const std::vector<WidgetNode> &nodes() const noexcept { return nodes_; }
   WidgetNode &node_at_mut(size_t index) noexcept { return nodes_[index]; }
 

@@ -4,9 +4,12 @@
 
 namespace cgfx {
 
-CgfxWindow::CgfxWindow(CgfxContext *ctx) : ctx_(ctx) {
-  focus_widget_id_raw_ = widget_tree_.root_id();
-}
+CgfxWindow::CgfxWindow(CgfxContext *ctx)
+    : ctx_(ctx),
+      focus_widget_id_raw_(widget_tree_.root_id()),
+      input_propagation_policy_(ctx
+                                    ? ctx->default_input_propagation_policy()
+                                    : CGFX_INPUT_PROPAGATION_TARGET_ONLY) {}
 
 CgfxWindow::~CgfxWindow() { shutdown(); }
 

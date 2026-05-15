@@ -1,6 +1,7 @@
 #include "core/widget_tree.hpp"
 
 #include <algorithm>
+#include <unordered_set>
 #include <vector>
 
 namespace cgfx {
@@ -320,6 +321,37 @@ uint64_t WidgetTree::hit_test_logical(int32_t x, int32_t y) const noexcept {
     return CGFX_WIDGET_ID_NONE;
   }
   return hit_test_recursive_idx(*this, /*root_index=*/0, x, y);
+}
+
+void WidgetTree::append_ancestors_leaf_to_root(
+    cgfx_widget_id leaf, std::vector<cgfx_widget_id> &out_chain) const {
+  if (leaf == CGFX_WIDGET_ID_NONE || nodes_.empty()) {
+    return;
+  }
+
+  cgfx_widget_id current = leaf;
+  const size_t guard = nodes_.size() + 2U;
+  std::unordered_set<uint64_t> visited;
+
+  for (size_t hop = 0; hop < guard; ++hop) {
+    size_t idx{};
+    if (index_of_widget(current, idx) != CGFX_OK || !nodes_[idx].alive) {
+      return;
+    }
+    if (!visited.insert(current).second) {
+      return;
+    }
+    out_chain.push_back(current);
+
+    const WidgetNode &n = nodes_[idx];
+    if (n.parent == WidgetNode::kNoParent || n.parent >= nodes_.size()) {
+      return;
+    }
+    if (!nodes_[n.parent].alive) {
+      return;
+    }
+    current = nodes_[n.parent].id;
+  }
 }
 
 cgfx_result WidgetTree::get_bounds(uint64_t widget_id,

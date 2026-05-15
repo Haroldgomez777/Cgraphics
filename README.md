@@ -96,15 +96,25 @@ if (cgfx_widget_bounds_logical_px(win, filler, &filler_bounds) == CGFX_OK) {
 
 **Layout snapshot:** Routed events reuse the Phase 4 flex pass driven by **`PlatformSurface::query_size_px`** (same path as **`cgfx_window_hit_test_logical_px`**), independent of backends.
 
-**Propagation (Phase 4.1):** **Target-only** — each delivered pointer/key payload exposes **`target_widget`**; callers implement behavior for that widget; ancestors are not implicitly notified.
+**Propagation:** Default remains **target-only** (backward compatible): one **`CGFX_EVENT_MOUSE_BUTTON`** / **`CGFX_EVENT_KEY`** dequeue per logical input with **`target_widget`** as the hit / focus leaf. Optional **`CGFX_INPUT_PROPAGATION_BUBBLE_TO_PARENT`** clones each pointer or keyboard event along the deterministic parent chain **inner-first** (`leaf → parent → … → root`; missed hits **`CGFX_WIDGET_ID_NONE`** still collapse to **one** slot). **`routed_widget`** on button/key payloads identifies the ancestor stop for **that** queue entry while **`target_widget`** stays the origin leaf (parity: both match in target-only mode). **`CGFX_EVENT_MOUSE_MOVE`** stays target-only regardless of policy.
 
-**Keyboard focus:** Default focus is the **root** widget. **`cgfx_window_set_focus_widget`** updates focus (**`CGFX_WIDGET_ID_NONE` resets to root**). A **primary mouse press** (**`CGFX_PRESS`**) on the hit target adopts focus automatically. **`cgfx_window_focus_widget`** always returns an alive widget (falling back to root after destroys). Routed **`CGFX_EVENT_KEY`** payloads set **`target_widget`** to the focused widget.
+Configure per window, or prime the factory default before **`cgfx_window_create`**:
+
+```c
+cgfx_context_set_default_input_propagation_policy(
+    ctx, CGFX_INPUT_PROPAGATION_TARGET_ONLY); /* omitted = default anyway */
+cgfx_window_set_input_propagation_policy(win,
+    CGFX_INPUT_PROPAGATION_BUBBLE_TO_PARENT);
+```
+
+**Keyboard focus:** Default focus is the **root** widget. **`cgfx_window_set_focus_widget`** updates focus (**`CGFX_WIDGET_ID_NONE` resets to root**). A **primary mouse press** (**`CGFX_PRESS`**) on the hit target adopts focus automatically. **`cgfx_window_focus_widget`** always returns an alive widget (falling back to root after destroys). Routed **`CGFX_EVENT_KEY`** payloads set **`target_widget`** to the focused widget (the bubble origin when that policy is enabled).
 
 ### Phase 4.1: C API & event fields
 
 - **`cgfx_window_hit_test_logical_px(win, x, y, &id)`** — refresh layout from surface size, then pick topmost logical hit.
 - **`cgfx_window_focus_widget` / `cgfx_window_set_focus_widget`**
-- Pointer / key payload field **`target_widget`** on **`cgfx_event_mouse_move_payload`**, **`cgfx_event_mouse_button_payload`**, **`cgfx_event_key_payload`**.
+- Pointer / key payload fields **`target_widget`** (origin) and **`routed_widget`** (current delivery stop) on **`cgfx_event_mouse_button_payload`**, **`cgfx_event_key_payload`** — plus **`target_widget`** on **`cgfx_event_mouse_move_payload`**.
+- **`cgfx_context_[get|set]_default_input_propagation_policy`**, **`cgfx_window_[get|set]_input_propagation_policy`**
 
 ```c
 cgfx_widget_id id = CGFX_WIDGET_ID_NONE;
@@ -118,8 +128,10 @@ cgfx_window_set_focus_widget(win, some_widget);
 cgfx_event ev;
 while (cgfx_next_event_into(ctx, &ev)) {
   if (ev.type == CGFX_EVENT_KEY) {
-    cgfx_widget_id who = ev.payload.key.target_widget;
-    (void)who;
+    cgfx_widget_id leaf = ev.payload.key.target_widget;
+    cgfx_widget_id routed_stop = ev.payload.key.routed_widget;
+    (void)leaf;
+    (void)routed_stop;
   }
 }
 ```
@@ -127,6 +139,7 @@ while (cgfx_next_event_into(ctx, &ev)) {
 ### Phase 4.1: tests
 
 - **`cgfx_widget_input_routing_test`** — hit depth, overlapping siblings + reparent z-order, focus validation helper.
+- **`cgfx_input_route_receivers_test`** — deterministic bubble expansion vs target-only and focus-at-root analogue.
 
 ## Prerequisites
 
