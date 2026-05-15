@@ -1,5 +1,7 @@
 # cgfx (Phase 2 → Phase 9 professional showcase)
 
+**v0.1 scope:** stable C API (`include/cgfx/cgfx_api.h`), Win32/Linux backends, presets + test suite documented below — not a semver guarantee of ABI stability yet.
+
 `cgfx` is a cross-platform GUI graphics framework in C/C++.
 
 Phase 1 includes:
@@ -20,7 +22,7 @@ Phase 3 hardens **event ingestion and delivery**:
 
 ### Phase 3: using events from C
 
-Backward compatible **`cgfx_poll_events`** + **`cgfx_next_event`** behave as before (`event_payload_bytes` sizing is described by **`cgfx_event_payload_byte_size(type)`**).
+Backward compatible **`cgfx_poll_events`** + **`cgfx_next_event`** behave as before (pass a buffer and its byte capacity as `event_payload` / `payload_capacity`; required size per type is **`cgfx_event_payload_byte_size(type)`**).
 
 New helper **`cgfx_next_event_into`** returns a **`cgfx_event`** struct (typed union keyed by **`type`**), avoiding manual `memcpy` layout handling when you control the codebase.
 
@@ -244,7 +246,7 @@ cgfx_widget_style_clear_overrides(win, settings_panel,
     CGFX_WIDGET_STYLE_OVERRIDE_PANEL_BACKGROUND);
 
 /* Debug: inspect hypothetical button face without driving real pointer capture */
-cgfx_color_rgba face{};
+cgfx_color_rgba face = {0};
 cgfx_widget_style_query_resolved_button_face_rgba_normalized(
     win, play_button, CGFX_BUTTON_FACE_QUERY_PRESSED, &face);
 ```
@@ -330,7 +332,7 @@ Phase 8 introduces a **small, platform-neutral animation core** wired into **`cg
 | **`WidgetAnimationSystem`** (`src/animation/widget_animation_system.*`) | Per-window clips: translate (logical px), opacity multiplier, lerped fill RGBA. **Newest clip id wins** when several clips collide on the same widget channel. |
 | **`IAnimPaintCompositor` / `AnimPaintMod`** | Adapter passed into **`BasicWidgets::paint`** so widgets remain decoupled from backends. |
 
-**C API (additive):** **`cgfx_context_[get|set]_animation_speed_scale`**, manual clock getters/setters, **`cgfx_animation_start_*`** / **`cgfx_animation_stop`**, **`cgfx_animation_stop_widget_property`**, **`cgfx_animation_is_active`** (see `cgfx_api.h`). Destroying widgets purges overlapping animation clips alongside facets/styles.
+**C API (additive):** **`cgfx_context_get_animation_speed_scale`** / **`cgfx_context_set_animation_speed_scale`**, manual clock getters/setters, **`cgfx_animation_start_*`** / **`cgfx_animation_stop`**, **`cgfx_animation_stop_widget_property`**, **`cgfx_animation_is_active`** (see `cgfx_api.h`). Destroying widgets purges overlapping animation clips alongside facets/styles.
 
 Each **`cgfx_window_begin_present_pass`** runs flex layout, samples the context clock vs the window’s prior sample (first step uses **`dt = 0`**), clamps **`dt`** to **`0.25` s**, scales by **`animation_speed_scale`**, then advances that window’s clip timeline before recording GL commands.
 
@@ -381,7 +383,7 @@ Linux (after `cmake --preset linux-gcc-debug`):
 ./build/linux-gcc-debug/cgfx_professional_app
 ```
 
-**Expect:** Dark themed layout with sidebar copy, hero card showing a numeric counter and blurb; **Record interaction** increments the counter, updates the measurement line, and animates the card horizontally; **Reset** clears count and snaps motion; mouse moves show hover affordances on buttons; **Escape** exits.
+**Expect:** Dark themed layout with sidebar copy, hero card showing a numeric counter and blurb; **Record interaction** increments the counter, updates the measurement line, and animates the card horizontally; **Reset demo** clears count and snaps motion; mouse moves show hover affordances on buttons; **Escape** exits.
 
 #### Phase 9: automated check
 

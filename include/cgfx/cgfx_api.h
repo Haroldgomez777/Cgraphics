@@ -240,6 +240,8 @@ CGFX_API void cgfx_context_set_input_routing_trace_enabled(cgfx_context *context
 CGFX_API bool cgfx_context_get_input_routing_trace_enabled(
     const cgfx_context *context);
 
+/** @p payload_capacity is the writable size (bytes) of @p event_payload; consult
+ *  `cgfx_event_payload_byte_size` for sizing. @p out_payload_used may be NULL. */
 CGFX_API bool cgfx_next_event(cgfx_context *context, cgfx_event_type *type,
                                cgfx_window **window_handle, void *event_payload,
                                size_t payload_capacity, size_t *out_payload_used);
@@ -368,14 +370,14 @@ CGFX_API cgfx_result cgfx_widget_set_layout_axis(cgfx_window *window,
                                                  cgfx_layout_axis axis);
 
 CGFX_API cgfx_result cgfx_widget_set_width(cgfx_window *window,
-                                         cgfx_widget_id widget_id,
-                                         cgfx_layout_size_kind kind,
-                                         uint32_t fixed_px);
+                                           cgfx_widget_id widget_id,
+                                           cgfx_layout_size_kind kind,
+                                           uint32_t fixed_px);
 
 CGFX_API cgfx_result cgfx_widget_set_height(cgfx_window *window,
-                                          cgfx_widget_id widget_id,
-                                          cgfx_layout_size_kind kind,
-                                          uint32_t fixed_px);
+                                            cgfx_widget_id widget_id,
+                                            cgfx_layout_size_kind kind,
+                                            uint32_t fixed_px);
 
 CGFX_API cgfx_result cgfx_widget_set_flex_grow(cgfx_window *window,
                                              cgfx_widget_id widget_id,

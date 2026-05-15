@@ -13,7 +13,7 @@ int main(void) {
   }
 
   cgfx_window_desc desc;
-  desc.title = "cgfx phase2 demo";
+  desc.title = "cgfx — Phase 2 demo";
   desc.width = 960U;
   desc.height = 540U;
 
@@ -47,7 +47,7 @@ int main(void) {
     float dpi_scale = 1.0f;
 
     if (cgfx_window_begin_present_pass(win, &ww, &hh, &dpi_scale) != CGFX_OK) {
-      fprintf(stderr, "begin_present failed\n");
+      fprintf(stderr, "cgfx_window_begin_present_pass failed\n");
       break;
     }
 
