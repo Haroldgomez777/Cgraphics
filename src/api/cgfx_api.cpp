@@ -167,6 +167,36 @@ cgfx_result cgfx_surface_clear_normalized_rgba(cgfx_window *window, float red,
       red, green, blue, alpha);
 }
 
+cgfx_result cgfx_surface_fill_rect_pixels(cgfx_window *window, int32_t x_px,
+                                          int32_t y_px, uint32_t width_px,
+                                          uint32_t height_px, float red,
+                                          float green, float blue,
+                                          float alpha) {
+  if (!window || width_px == 0U || height_px == 0U) {
+    return CGFX_ERROR_INVALID_ARGUMENT;
+  }
+  return cgfx::CgfxWindow::from_opaque(window)->fill_rect_present_surface(
+      x_px, y_px, width_px, height_px, red, green, blue, alpha);
+}
+
+cgfx_result cgfx_surface_fill_rect_batch_pixels(cgfx_window *window,
+                                                const cgfx_surface_fill_rect_item *items,
+                                                size_t item_count,
+                                                size_t stride_bytes) {
+  if (!window) {
+    return CGFX_ERROR_INVALID_ARGUMENT;
+  }
+  if (item_count == 0U) {
+    return CGFX_OK;
+  }
+  if (!items) {
+    return CGFX_ERROR_INVALID_ARGUMENT;
+  }
+
+  return cgfx::CgfxWindow::from_opaque(window)->fill_rect_batch_present_surface(
+      items, item_count, stride_bytes);
+}
+
 cgfx_result cgfx_window_get_size_pixels(const cgfx_window *window,
                                         uint32_t *out_width,
                                         uint32_t *out_height) {

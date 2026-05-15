@@ -141,7 +141,33 @@ CGFX_API void cgfx_window_end_present_pass(cgfx_window *window);
 
 CGFX_API cgfx_result cgfx_surface_clear_normalized_rgba(cgfx_window *window, float r,
                                                       float g, float b, float a);
+CGFX_API cgfx_result cgfx_surface_fill_rect_pixels(cgfx_window *window,
+                                                   int32_t x_px, int32_t y_px,
+                                                   uint32_t width_px,
+                                                   uint32_t height_px, float r,
+                                                   float g, float b, float a);
 
+typedef struct cgfx_surface_fill_rect_item {
+  int32_t x_px;
+  int32_t y_px;
+  uint32_t width_px;
+  uint32_t height_px;
+  float r;
+  float g;
+  float b;
+  float a;
+} cgfx_surface_fill_rect_item;
+
+/** Filled rects in framebuffer pixel coordinates; colors are normalized RGBA.
+ *  Items are concatenated into a single backend batch for the frame pass.
+ *
+ *   @param stride_bytes Distance between successive `cgfx_surface_fill_rect_item`.
+ *                       Use `0` for `sizeof(cgfx_surface_fill_rect_item)`. Must be at
+ *                       least `sizeof(cgfx_surface_fill_rect_item)`. */
+CGFX_API cgfx_result cgfx_surface_fill_rect_batch_pixels(
+    cgfx_window *window,
+    const cgfx_surface_fill_rect_item *items, size_t item_count,
+    size_t stride_bytes);
 CGFX_API cgfx_result cgfx_window_get_size_pixels(const cgfx_window *window,
                                                  uint32_t *out_width,
                                                  uint32_t *out_height);

@@ -84,6 +84,31 @@ cgfx_result CgfxWindow::clear_present_surface(float red, float green, float blue
   return command_list_.append_clear_color(red, green, blue, alpha);
 }
 
+cgfx_result CgfxWindow::fill_rect_present_surface(int32_t x_px, int32_t y_px,
+                                                  uint32_t width_px,
+                                                  uint32_t height_px, float red,
+                                                  float green, float blue,
+                                                  float alpha) {
+  if (!presenting_) {
+    return CGFX_ERROR_PLATFORM;
+  }
+  if (width_px == 0U || height_px == 0U) {
+    return CGFX_ERROR_INVALID_ARGUMENT;
+  }
+  return command_list_.append_fill_rect(x_px, y_px, width_px, height_px, red,
+                                        green, blue, alpha);
+}
+
+cgfx_result CgfxWindow::fill_rect_batch_present_surface(const void *items,
+                                                        size_t item_count,
+                                                        size_t stride_bytes) {
+  if (!presenting_) {
+    return CGFX_ERROR_PLATFORM;
+  }
+  return command_list_.append_fill_rect_batch_interleaved(items, item_count,
+                                                          stride_bytes);
+}
+
 void CgfxWindow::end_present_pass() {
   if (!presenting_) {
     return;
