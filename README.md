@@ -1,4 +1,4 @@
-# cgfx (Phase 1)
+# cgfx (Phase 2)
 
 `cgfx` is a cross-platform GUI graphics framework in C/C++.
 
@@ -8,6 +8,8 @@ Phase 1 includes:
 - Event polling and normalized input events
 - Present pass with double buffering
 - Minimal C API and smoke test
+
+Phase 2 adds incremental render-command recording for the present pass (clear, filled rectangles including a batched path).
 
 ## Prerequisites
 
@@ -71,8 +73,22 @@ cmake --build build -j
 
 After building, run the demo executable:
 
-- Windows: `build/cgfx_demo.exe`
-- Linux: `build/cgfx_demo`
+- Preset output (recommended): Windows `build/windows-mingw-debug/cgfx_demo.exe`, Linux `build/linux-gcc-debug/cgfx_demo`
+- Plain `cmake -S . -B build` layouts: Windows `build/cgfx_demo.exe`, Linux `build/cgfx_demo`
+
+## Phase 2.3: Batch filled rectangles (`cgfx_surface_fill_rect_batch_pixels`)
+
+The demo composites a tiled checker-style grid drawn with **`cgfx_surface_fill_rect_batch_pixels`** (stride `0` means packed rows of **`cgfx_surface_fill_rect_item`**) and overlays the middle rectangle using the single **`cgfx_surface_fill_rect_pixels`** helper so both paths remain exercised each frame.
+
+To verify Phase 2.3 locally:
+
+- Build and test via the presets (see sections above): `cmake --preset windows-mingw-debug`, then `cmake --build --preset build-windows-mingw-debug`, finally `ctest --preset test-windows-mingw-debug`
+- Launch `cgfx_demo` from the configure directory and confirm both the tiled background (batch path) and central highlight (legacy single-rect API) render without errors
+
+Stride notes:
+
+- `stride_bytes >= sizeof(cgfx_surface_fill_rect_item)` (or pass `0` to use exactly that size).
+- Rows may embed extra trailing padding/strides commonly used when batch data lives in richer engine structs—the first **`sizeof(cgfx_surface_fill_rect_item)`** bytes of each row must mirror the canonical layout (**x**, **y**, **width**, **height**, tightly followed by **`r,g,b,a`** floats).
 
 ## Test
 
