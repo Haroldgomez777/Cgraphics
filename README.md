@@ -1,4 +1,4 @@
-# cgfx (Phase 2 → Phase 4 layout)
+# cgfx (Phase 2 → Phase 5 basic widgets)
 
 `cgfx` is a cross-platform GUI graphics framework in C/C++.
 
@@ -156,6 +156,50 @@ Tracing is **off by default** (`fprintf` is skipped entirely when disabled). **`
 
 **Note:** sequence reflects **enqueue order**, not necessarily **dequeue order** if the undersized-buffer path re-queues via **`push_priority_front`** (existing sequence is preserved on retry; a fresh priority insert gets a new higher id).
 
+### Phase 5: retained `Panel` / `Label` / `Button`
+
+Phase 5 layers a **facet registry** on the existing tree/flex core (`src/widgets/basic_widgets.*`) so visuals and simple interaction stay modular. Layout and handles remain in **`WidgetTree`**; each basic widget is created as a dedicated child with an attached facet (`cgfx_basic_widget_kind`).
+
+| Concern | Responsibility |
+| --- | --- |
+| **Geometry** | Phase 4 flex + `cgfx_widget_bounds_logical_px` unchanged. |
+| **Hit testing** | **`cgfx_window_hit_test_logical_px`** remains a **pure geometric** pick (back-compat). Routed pointer events (**`target_widget`** on move/button) use **`visible=false` facet** filtering so hidden subtrees behave like pass-through. |
+| **Rendering** | **`cgfx_window_draw_basic_widgets(win)`** emits filled rectangles into the existing command list (call after layout, during a present pass). |
+| **Text** | Labels and button captions store UTF-8; paint uses a **thin placeholder strip** whose width tracks byte length. **TODO(seam):** replace placeholder path with the future text engine (Phase 6/7); keep `cgfx_basic_widget_utf8_text_*` stable. |
+| **Clicks** | **Polling model:** on left-button release after a press on the **same** logical `BUTTON` facet, the library appends **`CGFX_EVENT_WIDGET_CLICK`** with **`cgfx_event_widget_click_payload`** (**`widget_id`**, **`button`**, **`x`**, **`y`**). dequeue via **`cgfx_next_event_into`**. Disabled buttons suppress hover tinting and activation. |
+
+```c
+cgfx_widget_id root = cgfx_window_widget_root(win);
+cgfx_widget_id dock = 0;
+cgfx_basic_widget_panel_create(win, root, &dock);
+cgfx_widget_set_layout_axis(win, dock, CGFX_LAYOUT_AXIS_COLUMN);
+
+cgfx_widget_id title = 0;
+cgfx_basic_widget_label_create(win, dock, &title);
+cgfx_basic_widget_utf8_text_set(win, title, "Title", strlen("Title"));
+
+cgfx_widget_id submit = 0;
+cgfx_basic_widget_button_create(win, dock, &submit);
+cgfx_basic_widget_utf8_text_set(win, submit, "OK", strlen("OK"));
+
+/* Inside present pass each frame after flex runs: */
+/* cgfx_window_draw_basic_widgets(win); */
+
+/* Event loop — handle synthesized activation alongside platform input */
+cgfx_event ev;
+while (cgfx_next_event_into(ctx, &ev)) {
+  if (ev.type == CGFX_EVENT_WIDGET_CLICK &&
+      ev.window == win &&
+      ev.payload.widget_click.widget_id == submit) {
+    /* Button activated — consume by handling here only (no bubbling on this channel). */
+  }
+}
+```
+
+### Phase 5: tests
+
+- **`cgfx_basic_widgets_test`** — facet kind round-trip, UTF-8 length, **`RenderCommandList`** fill-rect tally, visibility-filter hit pass-through (**no GPU**).
+
 ## Prerequisites
 
 ### Windows
@@ -259,6 +303,7 @@ The library baseline is considered stable when all of these pass:
 - `src/api/` - C API entry points
 - `src/core/` - context + window internals + **`widget_tree`**
 - `src/layout/` - Phase 4 flex sizing / measurement engine
+- `src/widgets/` - Phase 5 basic-widget facets (paint + interaction bookkeeping)
 - `src/platform/` - Win32/X11 platform backends
 - `src/render/` - minimal OpenGL surface/present helpers
 - `examples/` - demo app

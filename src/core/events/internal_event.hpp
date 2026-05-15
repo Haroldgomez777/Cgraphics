@@ -29,9 +29,13 @@ struct EventKey {
   cgfx_event_key_payload payload{};
 };
 
+struct EventWidgetClick {
+  cgfx_event_widget_click_payload payload{};
+};
+
 using EventBody =
     std::variant<EventClose, EventResize, EventMouseMove, EventMouseButton,
-                 EventKey>;
+                 EventKey, EventWidgetClick>;
 
 /** Typed platform event before C API serialization (variant payload + window).
  *  @p sequence assigned by EventQueue enqueue (0 until first queue admission). */
@@ -53,6 +57,9 @@ struct InternalEvent {
       CgfxWindow *w, cgfx_event_mouse_button_payload p) noexcept;
 
   static InternalEvent key(CgfxWindow *w, cgfx_event_key_payload p) noexcept;
+
+  static InternalEvent widget_click(
+      CgfxWindow *w, cgfx_event_widget_click_payload p) noexcept;
 };
 
 cgfx_event_type internal_event_kind(const InternalEvent &e) noexcept;

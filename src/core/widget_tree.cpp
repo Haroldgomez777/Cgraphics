@@ -24,14 +24,19 @@ bool logical_point_in_rect(int32_t x, int32_t y,
   return ix >= bx0 && iy >= by0 && ix < bx1 && iy < by1;
 }
 
-uint64_t hit_test_recursive_idx(const WidgetTree &tree, size_t node_index,
-                               int32_t x, int32_t y) noexcept {
+template <typename Pred>
+uint64_t hit_test_recursive_idx_pred(const WidgetTree &tree,
+                                   size_t node_index, int32_t x, int32_t y,
+                                   Pred &&include_subtree_under_node) noexcept {
   const std::vector<WidgetNode> &nodes = tree.nodes();
   if (node_index >= nodes.size()) {
     return CGFX_WIDGET_ID_NONE;
   }
   const WidgetNode &n = nodes[node_index];
   if (!n.alive) {
+    return CGFX_WIDGET_ID_NONE;
+  }
+  if (!include_subtree_under_node(n.id)) {
     return CGFX_WIDGET_ID_NONE;
   }
   if (!logical_point_in_rect(x, y, n.bounds)) {
@@ -42,12 +47,20 @@ uint64_t hit_test_recursive_idx(const WidgetTree &tree, size_t node_index,
    *  last child is “on top” among siblings. */
   for (auto it = n.children.rbegin(); it != n.children.rend(); ++it) {
     const size_t c = *it;
-    const uint64_t deep = hit_test_recursive_idx(tree, c, x, y);
+    const uint64_t deep =
+        hit_test_recursive_idx_pred(tree, c, x, y, include_subtree_under_node);
     if (deep != CGFX_WIDGET_ID_NONE) {
       return deep;
     }
   }
   return n.id;
+}
+
+uint64_t hit_test_recursive_idx(const WidgetTree &tree, size_t node_index,
+                                int32_t x, int32_t y) noexcept {
+  return hit_test_recursive_idx_pred(
+      tree, node_index, x, y,
+      [](cgfx_widget_id) noexcept -> bool { return true; });
 }
 
 } // namespace
@@ -321,6 +334,22 @@ uint64_t WidgetTree::hit_test_logical(int32_t x, int32_t y) const noexcept {
     return CGFX_WIDGET_ID_NONE;
   }
   return hit_test_recursive_idx(*this, /*root_index=*/0, x, y);
+}
+
+uint64_t WidgetTree::hit_test_logical_filtered(int32_t x, int32_t y,
+                                               LogicalHitFilter filter,
+                                               void *user_data) const noexcept {
+  if (nodes_.empty()) {
+    return CGFX_WIDGET_ID_NONE;
+  }
+  if (!filter) {
+    return hit_test_logical(x, y);
+  }
+  return hit_test_recursive_idx_pred(
+      *this, /*root_index=*/0, x, y, [filter,
+                                         user_data](cgfx_widget_id id) noexcept {
+        return filter(id, user_data);
+      });
 }
 
 void WidgetTree::append_ancestors_leaf_to_root(

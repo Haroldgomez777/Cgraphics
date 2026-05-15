@@ -69,6 +69,15 @@ public:
    *  Among siblings drawn on top equals **last** in children order (“last sibling on top”). */
   uint64_t hit_test_logical(int32_t x, int32_t y) const noexcept;
 
+  /** Optional @p filter: if non-null and returns false for a visited node,
+   *  that node's entire subtree is excluded from picking (hits pass through). */
+  using LogicalHitFilter =
+      bool (*)(cgfx_widget_id widget_id, void *user_data) noexcept;
+
+  uint64_t hit_test_logical_filtered(int32_t x, int32_t y,
+                                      LogicalHitFilter filter,
+                                      void *user_data) const noexcept;
+
   /** Appends @p leaf, its parent, …, ending at the intrinsic root (**inner-first**).
    *  If @p leaf is `CGFX_WIDGET_ID_NONE` or not an alive handle, returns without
    *  appending (does **not** clear @p out_chain). Parent cycles are bounded. */

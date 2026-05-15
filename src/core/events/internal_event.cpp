@@ -37,10 +37,18 @@ InternalEvent InternalEvent::mouse_button(
 }
 
 InternalEvent InternalEvent::key(CgfxWindow *w,
-                                   cgfx_event_key_payload p) noexcept {
+                                 cgfx_event_key_payload p) noexcept {
   InternalEvent e{};
   e.window = w;
   e.body = EventKey{p};
+  return e;
+}
+
+InternalEvent InternalEvent::widget_click(
+    CgfxWindow *w, cgfx_event_widget_click_payload p) noexcept {
+  InternalEvent e{};
+  e.window = w;
+  e.body = EventWidgetClick{p};
   return e;
 }
 
@@ -62,6 +70,9 @@ cgfx_event_type internal_event_kind(const InternalEvent &e) noexcept {
         }
         if constexpr (std::is_same_v<T, EventKey>) {
           return CGFX_EVENT_KEY;
+        }
+        if constexpr (std::is_same_v<T, EventWidgetClick>) {
+          return CGFX_EVENT_WIDGET_CLICK;
         }
         return static_cast<cgfx_event_type>(0);
       },
@@ -91,6 +102,9 @@ size_t internal_event_payload_byte_size(const InternalEvent &e) noexcept {
         if constexpr (std::is_same_v<T, EventKey>) {
           return sizeof(payload.payload);
         }
+        if constexpr (std::is_same_v<T, EventWidgetClick>) {
+          return sizeof(payload.payload);
+        }
         return 0;
       },
       e.body);
@@ -113,6 +127,8 @@ void internal_event_copy_payload_bytes(const InternalEvent &e,
         } else if constexpr (std::is_same_v<T, EventMouseButton>) {
           std::memcpy(dst, &payload.payload, sizeof(payload.payload));
         } else if constexpr (std::is_same_v<T, EventKey>) {
+          std::memcpy(dst, &payload.payload, sizeof(payload.payload));
+        } else if constexpr (std::is_same_v<T, EventWidgetClick>) {
           std::memcpy(dst, &payload.payload, sizeof(payload.payload));
         }
       },

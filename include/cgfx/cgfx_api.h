@@ -42,7 +42,18 @@ typedef enum cgfx_event_type {
   CGFX_EVENT_MOUSE_MOVE = 3,
   CGFX_EVENT_MOUSE_BUTTON = 4,
   CGFX_EVENT_KEY = 5,
+  /** Phase 5: synthesized activation for retained `BUTTON` facets (polling model). */
+  CGFX_EVENT_WIDGET_CLICK = 6,
 } cgfx_event_type;
+
+/** Phase 5 basic widget discriminators (panels/labels/buttons layered on retained tree).
+ *  Returned as `CGFX_BASIC_WIDGET_KIND_NONE` for structural-only widgets. */
+typedef enum cgfx_basic_widget_kind {
+  CGFX_BASIC_WIDGET_KIND_NONE = 0,
+  CGFX_BASIC_WIDGET_KIND_PANEL = 1,
+  CGFX_BASIC_WIDGET_KIND_LABEL = 2,
+  CGFX_BASIC_WIDGET_KIND_BUTTON = 3,
+} cgfx_basic_widget_kind;
 
 typedef enum cgfx_mouse_button {
   CGFX_MOUSE_LEFT = 0,
@@ -126,6 +137,13 @@ typedef uint64_t cgfx_widget_id;
 #  define CGFX_WIDGET_ID_NONE UINT64_C(0)
 #endif
 
+typedef struct cgfx_event_widget_click_payload {
+  cgfx_widget_id widget_id;
+  cgfx_mouse_button button;
+  int32_t x;
+  int32_t y;
+} cgfx_event_widget_click_payload;
+
 /** How pointer / keyboard logical events are expanded into the per-window event queue
  *  (see `target_widget` / `routed_widget` on relevant payloads). */
 typedef enum cgfx_input_propagation_policy {
@@ -184,6 +202,7 @@ typedef struct cgfx_event {
     cgfx_event_mouse_move_payload mouse_move;
     cgfx_event_mouse_button_payload mouse_button;
     cgfx_event_key_payload key;
+    cgfx_event_widget_click_payload widget_click;
   } payload;
   /** Per-context enqueue order assigned when the event is admitted to the
    *  queue (starts at 1). Use together with dequeue order for correlation;
@@ -384,6 +403,64 @@ CGFX_API cgfx_widget_id cgfx_window_focus_widget(const cgfx_window *window);
 /** Direct focus assignment; rejects unknown or destroyed widget ids (CGFX_WIDGET_ID_NONE → root focus). */
 CGFX_API cgfx_result cgfx_window_set_focus_widget(cgfx_window *window,
                                                   cgfx_widget_id widget_id);
+
+/* ---- Phase 5: Panel / Label / Button basics (facet registry on retained tree) ---- */
+
+CGFX_API cgfx_result cgfx_basic_widget_kind_of(cgfx_window *window,
+                                               cgfx_widget_id widget_id,
+                                               cgfx_basic_widget_kind *out_kind);
+
+CGFX_API cgfx_result cgfx_basic_widget_panel_create(cgfx_window *window,
+                                                  cgfx_widget_id parent_id,
+                                                  cgfx_widget_id *out_id);
+
+CGFX_API cgfx_result cgfx_basic_widget_label_create(cgfx_window *window,
+                                                    cgfx_widget_id parent_id,
+                                                    cgfx_widget_id *out_id);
+
+CGFX_API cgfx_result cgfx_basic_widget_button_create(cgfx_window *window,
+                                                     cgfx_widget_id parent_id,
+                                                     cgfx_widget_id *out_id);
+
+/** Record default visuals for facets into the Phase 2 command list — call each frame inside
+ *  `cgfx_window_begin_present_pass` / `cgfx_window_end_present_pass`.
+ *
+ * Labels render UTF-8 as a clipped placeholder underscore today; wire real shaping next in
+ *  the text subsystem (Phase 6/7 roadmap). */
+CGFX_API cgfx_result cgfx_window_draw_basic_widgets(cgfx_window *window);
+
+CGFX_API cgfx_result cgfx_basic_widget_set_visible(cgfx_window *window,
+                                                   cgfx_widget_id widget_id,
+                                                   int visible);
+
+CGFX_API cgfx_result cgfx_basic_widget_get_visible(cgfx_window *window,
+                                                   cgfx_widget_id widget_id,
+                                                   int *out_visible);
+
+CGFX_API cgfx_result cgfx_basic_widget_panel_set_background_rgba_normalized(
+    cgfx_window *window, cgfx_widget_id panel_id, float r, float g, float b, float a);
+
+CGFX_API cgfx_result cgfx_basic_widget_button_set_enabled(cgfx_window *window,
+                                                          cgfx_widget_id button_id,
+                                                          int enabled);
+
+CGFX_API cgfx_result cgfx_basic_widget_button_get_enabled(cgfx_window *window,
+                                                          cgfx_widget_id button_id,
+                                                          int *out_enabled);
+
+CGFX_API cgfx_result cgfx_basic_widget_utf8_text_set(cgfx_window *window,
+                                                    cgfx_widget_id widget_id,
+                                                    const char *utf8_bytes,
+                                                    size_t utf8_byte_length);
+
+CGFX_API cgfx_result cgfx_basic_widget_utf8_text_get_length(
+    cgfx_window *window, cgfx_widget_id widget_id, size_t *out_byte_length);
+
+CGFX_API cgfx_result cgfx_basic_widget_utf8_text_get(cgfx_window *window,
+                                                    cgfx_widget_id widget_id,
+                                                    char *out_bytes,
+                                                    size_t out_capacity,
+                                                    size_t *out_written_including_null);
 
 #ifdef __cplusplus
 }

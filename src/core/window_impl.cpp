@@ -2,6 +2,8 @@
 #include "core/context.hpp"
 #include "layout/flex_layout.hpp"
 
+#include <cstddef>
+
 namespace cgfx {
 
 CgfxWindow::CgfxWindow(CgfxContext *ctx)
@@ -132,6 +134,13 @@ void CgfxWindow::end_present_pass() {
   presenting_ = false;
 }
 
+cgfx_result CgfxWindow::draw_basic_widgets() {
+  if (!presenting_) {
+    return CGFX_ERROR_PLATFORM;
+  }
+  return basic_widgets_mut().paint(widget_tree_mut(), command_list_);
+}
+
 void CgfxWindow::sync_widget_layout_logical_from_surface() noexcept {
   if (!surface_) {
     return;
@@ -163,13 +172,20 @@ void CgfxWindow::reconcile_focus_after_structure_change() noexcept {
       widget_tree_.validated_widget_id_or_root(focus_widget_id_raw_);
 }
 
+cgfx_widget_id CgfxWindow::pick_input_logical_xy(int32_t x,
+                                                int32_t y) noexcept {
+  sync_widget_layout_logical_from_surface();
+  return widget_tree_.hit_test_logical_filtered(
+      x, y, &BasicWidgets::input_visibility_filterThunk,
+      static_cast<void *>(this));
+}
+
 void routing_sync_pick_mouse_move_targets(CgfxWindow *w,
                                           cgfx_event_mouse_move_payload *p) {
   if (!w || !p) {
     return;
   }
-  w->sync_widget_layout_logical_from_surface();
-  p->target_widget = w->widget_tree().hit_test_logical(p->x, p->y);
+  p->target_widget = w->pick_input_logical_xy(p->x, p->y);
 }
 
 void routing_sync_pick_mouse_button_targets(
@@ -177,8 +193,7 @@ void routing_sync_pick_mouse_button_targets(
   if (!w || !p) {
     return;
   }
-  w->sync_widget_layout_logical_from_surface();
-  const cgfx_widget_id hit = w->widget_tree().hit_test_logical(p->x, p->y);
+  const cgfx_widget_id hit = w->pick_input_logical_xy(p->x, p->y);
   p->target_widget = hit;
 
   /** Primary-pointer press adopts focus for routed key stream (Phase 4.1). */

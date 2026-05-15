@@ -1,6 +1,7 @@
 #include "core/events/event_dispatch.hpp"
 
 #include "core/context.hpp"
+#include "core/events/internal_event.hpp"
 #include "core/input_propagation.hpp"
 #include "core/events/event_routing_diagnostics.hpp"
 #include "core/window_impl.hpp"
@@ -71,6 +72,9 @@ void event_dispatch_mouse_move(CgfxContext &ctx, CgfxWindow *window, int32_t x,
   p.x = x;
   p.y = y;
   routing_sync_pick_mouse_move_targets(window, &p);
+  window->basic_widgets_mut().on_mouse_move_logical(window->widget_tree(),
+                                                       p.target_widget, p.x,
+                                                       p.y);
   ctx.enqueue_event(InternalEvent::mouse_move(window, p));
 }
 
@@ -86,6 +90,11 @@ void event_dispatch_mouse_button(CgfxContext &ctx, CgfxWindow *window,
   p.target_widget = CGFX_WIDGET_ID_NONE;
   routing_sync_pick_mouse_button_targets(window, &p);
   enqueue_mouse_button_propagating(ctx, window, p);
+  cgfx::WidgetClickSynthesisResult click{};
+  window->basic_widgets_mut().on_mouse_button_logical(window, p, &click);
+  if (click.should_emit) {
+    ctx.enqueue_event(InternalEvent::widget_click(window, click.payload));
+  }
 }
 
 void event_dispatch_key(CgfxContext &ctx, CgfxWindow *window, cgfx_key key,

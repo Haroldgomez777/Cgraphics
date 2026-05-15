@@ -12,11 +12,12 @@ option(CGFX_BUILD_TESTS "Build minimal tests" ON)
 
 set(CGFX_PUBLIC_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/include")
 
-add_library(cgfx SHARED
+  add_library(cgfx SHARED
   src/api/cgfx_api.cpp
   src/core/context.cpp
   src/core/widget_tree.cpp
   src/layout/flex_layout.cpp
+  src/widgets/basic_widgets.cpp
   src/core/events/internal_event.cpp
   src/core/events/event_queue.cpp
   src/core/events/event_dispatch.cpp
@@ -143,4 +144,21 @@ if(CGFX_BUILD_TESTS)
   target_compile_options(cgfx_widget_input_routing_test PRIVATE
       $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall -Wextra -Wpedantic>)
   add_test(NAME cgfx_widget_input_routing_test COMMAND cgfx_widget_input_routing_test)
+
+  add_executable(cgfx_basic_widgets_test tests/basic_widgets_test.cpp
+      src/core/widget_tree.cpp
+      src/layout/flex_layout.cpp
+      src/widgets/basic_widgets.cpp
+      src/render/render_command_list.cpp
+  )
+  target_include_directories(cgfx_basic_widgets_test PRIVATE
+      "${CMAKE_CURRENT_SOURCE_DIR}/src"
+      "${CMAKE_CURRENT_SOURCE_DIR}/include"
+  )
+  set_target_properties(cgfx_basic_widgets_test PROPERTIES
+      CXX_STANDARD 17
+      CXX_EXTENSIONS OFF)
+  target_compile_options(cgfx_basic_widgets_test PRIVATE
+      $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall -Wextra -Wpedantic>)
+  add_test(NAME cgfx_basic_widgets_test COMMAND cgfx_basic_widgets_test)
 endif()

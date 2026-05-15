@@ -3,6 +3,7 @@
 #include "core/context.hpp"
 #include "core/events/internal_event.hpp"
 #include "core/window_impl.hpp"
+#include "widgets/basic_widgets.hpp"
 
 #include <cstring>
 #include <memory>
@@ -23,6 +24,8 @@ size_t payload_bytes_for_type(cgfx_event_type type) noexcept {
     return sizeof(cgfx_event_mouse_button_payload);
   case CGFX_EVENT_KEY:
     return sizeof(cgfx_event_key_payload);
+  case CGFX_EVENT_WIDGET_CLICK:
+    return sizeof(cgfx_event_widget_click_payload);
   default:
     return 0;
   }
@@ -71,6 +74,8 @@ void internal_event_to_out(const cgfx::InternalEvent &iev,
           out_ev->payload.mouse_button = body.payload;
         } else if constexpr (std::is_same_v<T, cgfx::EventKey>) {
           out_ev->payload.key = body.payload;
+        } else if constexpr (std::is_same_v<T, cgfx::EventWidgetClick>) {
+          out_ev->payload.widget_click = body.payload;
         }
       },
       iev.body);
@@ -478,6 +483,7 @@ cgfx_result cgfx_widget_destroy(cgfx_window *window, cgfx_widget_id widget_id) {
     return CGFX_ERROR_INVALID_ARGUMENT;
   }
   cgfx::CgfxWindow *w = cgfx::CgfxWindow::from_opaque(window);
+  w->basic_widgets_mut().purge_subtree(w->widget_tree(), widget_id);
   const cgfx_result r = w->widget_tree_mut().destroy_subtree(widget_id);
   if (r == CGFX_OK) {
     w->reconcile_focus_after_structure_change();
@@ -591,6 +597,198 @@ cgfx_result cgfx_window_set_focus_widget(cgfx_window *window,
   }
   return cgfx::CgfxWindow::from_opaque(window)->assign_focus_widget_logical(
       widget_id);
+}
+
+static cgfx_basic_widget_kind to_public_basic_kind(
+    cgfx::BasicWidgetKind k) noexcept {
+  switch (k) {
+  case cgfx::BasicWidgetKind::Panel:
+    return CGFX_BASIC_WIDGET_KIND_PANEL;
+  case cgfx::BasicWidgetKind::Label:
+    return CGFX_BASIC_WIDGET_KIND_LABEL;
+  case cgfx::BasicWidgetKind::Button:
+    return CGFX_BASIC_WIDGET_KIND_BUTTON;
+  default:
+    return CGFX_BASIC_WIDGET_KIND_NONE;
+  }
+}
+
+cgfx_result cgfx_basic_widget_kind_of(cgfx_window *window,
+                                      cgfx_widget_id widget_id,
+                                      cgfx_basic_widget_kind *out_kind) {
+  if (!window || !out_kind) {
+    return CGFX_ERROR_INVALID_ARGUMENT;
+  }
+  cgfx::BasicWidgetKind bk{};
+  const bool has = cgfx::CgfxWindow::from_opaque(window)
+                       ->basic_widgets()
+                       .try_get_kind(widget_id, &bk);
+  *out_kind = has ? to_public_basic_kind(bk) : CGFX_BASIC_WIDGET_KIND_NONE;
+  return CGFX_OK;
+}
+
+cgfx_result cgfx_basic_widget_panel_create(cgfx_window *window,
+                                           cgfx_widget_id parent_id,
+                                           cgfx_widget_id *out_id) {
+  if (!window || !out_id) {
+    return CGFX_ERROR_INVALID_ARGUMENT;
+  }
+  cgfx::CgfxWindow *w = cgfx::CgfxWindow::from_opaque(window);
+  return w->basic_widgets_mut().create_panel(w->widget_tree_mut(), parent_id,
+                                             out_id);
+}
+
+cgfx_result cgfx_basic_widget_label_create(cgfx_window *window,
+                                           cgfx_widget_id parent_id,
+                                           cgfx_widget_id *out_id) {
+  if (!window || !out_id) {
+    return CGFX_ERROR_INVALID_ARGUMENT;
+  }
+  cgfx::CgfxWindow *w = cgfx::CgfxWindow::from_opaque(window);
+  return w->basic_widgets_mut().create_label(w->widget_tree_mut(), parent_id,
+                                             out_id);
+}
+
+cgfx_result cgfx_basic_widget_button_create(cgfx_window *window,
+                                            cgfx_widget_id parent_id,
+                                            cgfx_widget_id *out_id) {
+  if (!window || !out_id) {
+    return CGFX_ERROR_INVALID_ARGUMENT;
+  }
+  cgfx::CgfxWindow *w = cgfx::CgfxWindow::from_opaque(window);
+  return w->basic_widgets_mut().create_button(w->widget_tree_mut(), parent_id,
+                                              out_id);
+}
+
+cgfx_result cgfx_window_draw_basic_widgets(cgfx_window *window) {
+  if (!window) {
+    return CGFX_ERROR_INVALID_ARGUMENT;
+  }
+  return cgfx::CgfxWindow::from_opaque(window)->draw_basic_widgets();
+}
+
+cgfx_result cgfx_basic_widget_set_visible(cgfx_window *window,
+                                          cgfx_widget_id widget_id,
+                                          int visible) {
+  if (!window) {
+    return CGFX_ERROR_INVALID_ARGUMENT;
+  }
+  return cgfx::CgfxWindow::from_opaque(window)
+      ->basic_widgets_mut()
+      .set_visible(widget_id, visible != 0);
+}
+
+cgfx_result cgfx_basic_widget_get_visible(cgfx_window *window,
+                                          cgfx_widget_id widget_id,
+                                          int *out_visible) {
+  if (!window || !out_visible) {
+    return CGFX_ERROR_INVALID_ARGUMENT;
+  }
+  bool v{};
+  const cgfx_result r = cgfx::CgfxWindow::from_opaque(window)
+                            ->basic_widgets()
+                            .get_visible(widget_id, &v);
+  *out_visible = v ? 1 : 0;
+  return r;
+}
+
+cgfx_result cgfx_basic_widget_panel_set_background_rgba_normalized(
+    cgfx_window *window, cgfx_widget_id panel_id, float r, float g, float b,
+    float a) {
+  if (!window) {
+    return CGFX_ERROR_INVALID_ARGUMENT;
+  }
+  return cgfx::CgfxWindow::from_opaque(window)
+      ->basic_widgets_mut()
+      .set_panel_background_rgba(panel_id, r, g, b, a);
+}
+
+cgfx_result cgfx_basic_widget_button_set_enabled(cgfx_window *window,
+                                                 cgfx_widget_id button_id,
+                                                 int enabled) {
+  if (!window) {
+    return CGFX_ERROR_INVALID_ARGUMENT;
+  }
+  return cgfx::CgfxWindow::from_opaque(window)
+      ->basic_widgets_mut()
+      .set_button_enabled(button_id, enabled != 0);
+}
+
+cgfx_result cgfx_basic_widget_button_get_enabled(cgfx_window *window,
+                                                 cgfx_widget_id button_id,
+                                                 int *out_enabled) {
+  if (!window || !out_enabled) {
+    return CGFX_ERROR_INVALID_ARGUMENT;
+  }
+  bool e{};
+  const cgfx_result r = cgfx::CgfxWindow::from_opaque(window)
+                            ->basic_widgets()
+                            .get_button_enabled(button_id, &e);
+  *out_enabled = e ? 1 : 0;
+  return r;
+}
+
+cgfx_result cgfx_basic_widget_utf8_text_set(cgfx_window *window,
+                                            cgfx_widget_id widget_id,
+                                            const char *utf8_bytes,
+                                            size_t utf8_byte_length) {
+  if (!window) {
+    return CGFX_ERROR_INVALID_ARGUMENT;
+  }
+  cgfx::CgfxWindow *w = cgfx::CgfxWindow::from_opaque(window);
+  cgfx::BasicWidgetKind kk{};
+  if (!w->basic_widgets().try_get_kind(widget_id, &kk)) {
+    return CGFX_ERROR_INVALID_ARGUMENT;
+  }
+  if (kk != cgfx::BasicWidgetKind::Label && kk != cgfx::BasicWidgetKind::Button) {
+    return CGFX_ERROR_INVALID_ARGUMENT;
+  }
+
+  size_t nbytes = utf8_byte_length;
+  if (utf8_bytes && nbytes == 0U) {
+    nbytes = std::strlen(utf8_bytes);
+  }
+
+  return w->basic_widgets_mut().set_utf8_text(widget_id, kk, utf8_bytes,
+                                              nbytes);
+}
+
+cgfx_result cgfx_basic_widget_utf8_text_get_length(cgfx_window *window,
+                                                   cgfx_widget_id widget_id,
+                                                   size_t *out_byte_length) {
+  if (!window || !out_byte_length) {
+    return CGFX_ERROR_INVALID_ARGUMENT;
+  }
+  cgfx::CgfxWindow *w = cgfx::CgfxWindow::from_opaque(window);
+  cgfx::BasicWidgetKind kk{};
+  if (!w->basic_widgets().try_get_kind(widget_id, &kk)) {
+    return CGFX_ERROR_INVALID_ARGUMENT;
+  }
+  if (kk != cgfx::BasicWidgetKind::Label && kk != cgfx::BasicWidgetKind::Button) {
+    return CGFX_ERROR_INVALID_ARGUMENT;
+  }
+  return w->basic_widgets().utf8_text_byte_length(widget_id, kk,
+                                                 out_byte_length);
+}
+
+cgfx_result cgfx_basic_widget_utf8_text_get(cgfx_window *window,
+                                          cgfx_widget_id widget_id,
+                                          char *out_bytes,
+                                          size_t out_capacity,
+                                          size_t *out_written_including_null) {
+  if (!window || !out_written_including_null) {
+    return CGFX_ERROR_INVALID_ARGUMENT;
+  }
+  cgfx::CgfxWindow *w = cgfx::CgfxWindow::from_opaque(window);
+  cgfx::BasicWidgetKind kk{};
+  if (!w->basic_widgets().try_get_kind(widget_id, &kk)) {
+    return CGFX_ERROR_INVALID_ARGUMENT;
+  }
+  if (kk != cgfx::BasicWidgetKind::Label && kk != cgfx::BasicWidgetKind::Button) {
+    return CGFX_ERROR_INVALID_ARGUMENT;
+  }
+  return w->basic_widgets().get_utf8_text(widget_id, kk, out_bytes,
+                                         out_capacity, out_written_including_null);
 }
 
 } // extern "C"

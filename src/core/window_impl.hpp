@@ -5,6 +5,7 @@
 #include "core/widget_tree.hpp"
 #include "render/render_command_list.hpp"
 #include "render/render_device.hpp"
+#include "widgets/basic_widgets.hpp"
 
 #include <memory>
 
@@ -79,10 +80,17 @@ public:
   cgfx_result fill_rect_batch_present_surface(const void *items,
                                               size_t item_count,
                                               size_t stride_bytes);
+  cgfx_result draw_basic_widgets();
   void end_present_pass();
 
   WidgetTree &widget_tree_mut() noexcept { return widget_tree_; }
   const WidgetTree &widget_tree() const noexcept { return widget_tree_; }
+
+  /** Deepest hit after flex sync, honoring basic-widget `visible=false` subtrees. */
+  cgfx_widget_id pick_input_logical_xy(int32_t x, int32_t y) noexcept;
+
+  BasicWidgets &basic_widgets_mut() noexcept { return basic_widgets_; }
+  const BasicWidgets &basic_widgets() const noexcept { return basic_widgets_; }
 
   void sync_widget_layout_logical_from_surface() noexcept;
 
@@ -108,6 +116,7 @@ private:
   std::unique_ptr<RenderDevice> render_device_{};
   RenderCommandList command_list_{};
   WidgetTree widget_tree_{};
+  BasicWidgets basic_widgets_{};
   cgfx_widget_id focus_widget_id_raw_{CGFX_WIDGET_ID_NONE};
   cgfx_input_propagation_policy input_propagation_policy_{CGFX_INPUT_PROPAGATION_TARGET_ONLY};
   bool presenting_{false};
