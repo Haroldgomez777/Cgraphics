@@ -120,6 +120,12 @@ typedef enum cgfx_key {
   CGFX_KEY_Z,
 } cgfx_key;
 
+typedef uint64_t cgfx_widget_id;
+
+#ifndef CGFX_WIDGET_ID_NONE
+#  define CGFX_WIDGET_ID_NONE UINT64_C(0)
+#endif
+
 typedef struct cgfx_event_resize_payload {
   uint32_t width;
   uint32_t height;
@@ -128,6 +134,8 @@ typedef struct cgfx_event_resize_payload {
 typedef struct cgfx_event_mouse_move_payload {
   int32_t x;
   int32_t y;
+  /** Phase 4.1: logical hit target; propagation is target-only (no bubble). */
+  cgfx_widget_id target_widget;
 } cgfx_event_mouse_move_payload;
 
 typedef struct cgfx_event_mouse_button_payload {
@@ -135,6 +143,8 @@ typedef struct cgfx_event_mouse_button_payload {
   cgfx_input_action action;
   int32_t x;
   int32_t y;
+  /** Phase 4.1: logical hit target; primary click sets keyboard focus here. */
+  cgfx_widget_id target_widget;
 } cgfx_event_mouse_button_payload;
 
 typedef struct cgfx_event_key_payload {
@@ -142,6 +152,8 @@ typedef struct cgfx_event_key_payload {
   uint32_t native_code;
   cgfx_input_action action;
   int repeat;
+  /** Phase 4.1: widget receiving keyboard input (focus); target-only routing. */
+  cgfx_widget_id target_widget;
 } cgfx_event_key_payload;
 
 typedef struct cgfx_event_close_payload {
@@ -252,8 +264,6 @@ CGFX_API cgfx_result cgfx_window_get_dpi_scale(const cgfx_window *window,
 
 /* ---- Phase 4: retained widget tree + flex layout foundation ---- */
 
-typedef uint64_t cgfx_widget_id;
-
 typedef struct cgfx_layout_rect {
   int32_t x;
   int32_t y;
@@ -309,6 +319,21 @@ CGFX_API cgfx_result cgfx_widget_set_flex_shrink(cgfx_window *window,
 CGFX_API cgfx_result cgfx_widget_bounds_logical_px(const cgfx_window *window,
                                                    cgfx_widget_id widget_id,
                                                    cgfx_layout_rect *out_bounds);
+
+/* ---- Phase 4.1: hit-testing + input routing ---- */
+
+/** Hit-test using the same flex layout snapshot as input routing (refreshes flex from
+ * `PlatformSurface::query_size_px`; requires a mutable window pointer because layout caches update). */
+CGFX_API cgfx_result cgfx_window_hit_test_logical_px(cgfx_window *window,
+                                                      int32_t x, int32_t y,
+                                                      cgfx_widget_id *out_target);
+
+/** Current keyboard focus widget (validated each access; stale ids fall back to root). */
+CGFX_API cgfx_widget_id cgfx_window_focus_widget(const cgfx_window *window);
+
+/** Direct focus assignment; rejects unknown or destroyed widget ids (CGFX_WIDGET_ID_NONE → root focus). */
+CGFX_API cgfx_result cgfx_window_set_focus_widget(cgfx_window *window,
+                                                  cgfx_widget_id widget_id);
 
 #ifdef __cplusplus
 }

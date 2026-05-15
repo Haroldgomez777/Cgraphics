@@ -84,13 +84,34 @@ public:
   WidgetTree &widget_tree_mut() noexcept { return widget_tree_; }
   const WidgetTree &widget_tree() const noexcept { return widget_tree_; }
 
+  void sync_widget_layout_logical_from_surface() noexcept;
+
+  cgfx_widget_id resolved_focus_widget_id() const noexcept {
+    return widget_tree_.validated_widget_id_or_root(focus_widget_id_raw_);
+  }
+
+  cgfx_result assign_focus_widget_logical(cgfx_widget_id id) noexcept;
+
+  void reconcile_focus_after_structure_change() noexcept;
+
 private:
   CgfxContext *ctx_{};
   std::unique_ptr<PlatformSurface> surface_{};
   std::unique_ptr<RenderDevice> render_device_{};
   RenderCommandList command_list_{};
   WidgetTree widget_tree_{};
+  cgfx_widget_id focus_widget_id_raw_{CGFX_WIDGET_ID_NONE};
   bool presenting_{false};
 };
+
+/** Used by centralized event_dispatch; keeps Win32/X11 backends free of widget coupling. */
+void routing_sync_pick_mouse_move_targets(CgfxWindow *w,
+                                          cgfx_event_mouse_move_payload *p);
+
+void routing_sync_pick_mouse_button_targets(CgfxWindow *w,
+                                            cgfx_event_mouse_button_payload *p);
+
+void routing_pick_key_focus_targets(CgfxWindow *w,
+                                    cgfx_event_key_payload *p);
 
 } // namespace cgfx

@@ -62,6 +62,13 @@ public:
 
   cgfx_result get_bounds(uint64_t widget_id, cgfx_layout_rect *out) const;
 
+  /** If @p candidate is alive, return it; otherwise return ``root_id()``. */
+  uint64_t validated_widget_id_or_root(uint64_t candidate) const noexcept;
+
+  /** Deepest widget whose bounds contain (x,y) in logical client space.
+   *  Among siblings drawn on top equals **last** in children order (“last sibling on top”). */
+  uint64_t hit_test_logical(int32_t x, int32_t y) const noexcept;
+
   const std::vector<WidgetNode> &nodes() const noexcept { return nodes_; }
   WidgetNode &node_at_mut(size_t index) noexcept { return nodes_[index]; }
 

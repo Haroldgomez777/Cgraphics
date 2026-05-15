@@ -384,7 +384,11 @@ cgfx_result cgfx_widget_destroy(cgfx_window *window, cgfx_widget_id widget_id) {
     return CGFX_ERROR_INVALID_ARGUMENT;
   }
   cgfx::CgfxWindow *w = cgfx::CgfxWindow::from_opaque(window);
-  return w->widget_tree_mut().destroy_subtree(widget_id);
+  const cgfx_result r = w->widget_tree_mut().destroy_subtree(widget_id);
+  if (r == CGFX_OK) {
+    w->reconcile_focus_after_structure_change();
+  }
+  return r;
 }
 
 cgfx_result cgfx_widget_reparent(cgfx_window *window,
@@ -462,6 +466,37 @@ cgfx_result cgfx_widget_bounds_logical_px(const cgfx_window *window,
   const cgfx::CgfxWindow *w =
       cgfx::CgfxWindow::from_opaque(const_cast<cgfx_window *>(window));
   return w->widget_tree().get_bounds(widget_id, out_bounds);
+}
+
+cgfx_result cgfx_window_hit_test_logical_px(cgfx_window *window, int32_t x,
+                                             int32_t y,
+                                             cgfx_widget_id *out_target) {
+  if (!window || !out_target) {
+    return CGFX_ERROR_INVALID_ARGUMENT;
+  }
+  cgfx::CgfxWindow *w = cgfx::CgfxWindow::from_opaque(window);
+
+  /** Match input routing snapshot */
+  w->sync_widget_layout_logical_from_surface();
+  *out_target = w->widget_tree().hit_test_logical(x, y);
+  return CGFX_OK;
+}
+
+cgfx_widget_id cgfx_window_focus_widget(const cgfx_window *window) {
+  if (!window) {
+    return CGFX_WIDGET_ID_NONE;
+  }
+  return cgfx::CgfxWindow::from_opaque(const_cast<cgfx_window *>(window))
+      ->resolved_focus_widget_id();
+}
+
+cgfx_result cgfx_window_set_focus_widget(cgfx_window *window,
+                                        cgfx_widget_id widget_id) {
+  if (!window) {
+    return CGFX_ERROR_INVALID_ARGUMENT;
+  }
+  return cgfx::CgfxWindow::from_opaque(window)->assign_focus_widget_logical(
+      widget_id);
 }
 
 } // extern "C"

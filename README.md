@@ -49,7 +49,7 @@ Production-oriented **retained-mode tree**, **deterministic Phase 4 flex layout*
 | **`src/core/widget_tree`** | Stable `cgfx_widget_id` handles (`uint64_t`), persistent parent/sibling ordering, subtree destroy semantics, validated reparent guards (no ancestor/descendant cycles). |
 | **`src/layout/flex_layout`** | Row/column directional containers over logical pixel sizes, **`AUTO`** vs **`FIXED`** sizing knobs, proportional **grow/shrink**, absolute bounds written as **`cgfx_layout_rect`**. |
 
-Layout runs immediately after the platform **`begin_present`** surface dimensions are sampled and **before** any render commands enqueue for that pass (Phase 4 currently maps logical pixels directly to framebuffer pixels; DPI-awareness is slated for Phase 4.1).
+Layout runs immediately after the platform **`begin_present`** surface dimensions are sampled and **before** any render commands enqueue for that pass (Phase 4 currently maps logical pixels directly to framebuffer pixels; further DPI mapping of hit coordinates is a follow-on item).
 
 Minimal C bindings (additive to earlier phases):
 
@@ -87,6 +87,46 @@ if (cgfx_widget_bounds_logical_px(win, filler, &filler_bounds) == CGFX_OK) {
 ### Phase 4: tests
 
 - **`cgfx_widget_layout_test`** — tree lifecycle + grow/shrink flex scenarios without booting GPU surfaces.
+
+### Phase 4.1: hit-testing + input routing (target-only)
+
+**Stacking / z-order:** among siblings, the widget **last** in the parent’s `children` order is treated as **on top** when rectangles overlap (“last appended wins”), matching intuition for painters that draw siblings in sequential order.
+
+**Hit-test:** Deepest descendant whose bounds contain the point `(x,y)` in **logical client pixels**. Half-open rectangles: `[x,x+width) × [y,y+height)`. Zero-area bounds never hit. **`CGFX_WIDGET_ID_NONE`** is returned only when nothing contains the coordinate (typically outside the laid-out root).
+
+**Layout snapshot:** Routed events reuse the Phase 4 flex pass driven by **`PlatformSurface::query_size_px`** (same path as **`cgfx_window_hit_test_logical_px`**), independent of backends.
+
+**Propagation (Phase 4.1):** **Target-only** — each delivered pointer/key payload exposes **`target_widget`**; callers implement behavior for that widget; ancestors are not implicitly notified.
+
+**Keyboard focus:** Default focus is the **root** widget. **`cgfx_window_set_focus_widget`** updates focus (**`CGFX_WIDGET_ID_NONE` resets to root**). A **primary mouse press** (**`CGFX_PRESS`**) on the hit target adopts focus automatically. **`cgfx_window_focus_widget`** always returns an alive widget (falling back to root after destroys). Routed **`CGFX_EVENT_KEY`** payloads set **`target_widget`** to the focused widget.
+
+### Phase 4.1: C API & event fields
+
+- **`cgfx_window_hit_test_logical_px(win, x, y, &id)`** — refresh layout from surface size, then pick topmost logical hit.
+- **`cgfx_window_focus_widget` / `cgfx_window_set_focus_widget`**
+- Pointer / key payload field **`target_widget`** on **`cgfx_event_mouse_move_payload`**, **`cgfx_event_mouse_button_payload`**, **`cgfx_event_key_payload`**.
+
+```c
+cgfx_widget_id id = CGFX_WIDGET_ID_NONE;
+if (cgfx_window_hit_test_logical_px(win, mx, my, &id) == CGFX_OK &&
+    id != CGFX_WIDGET_ID_NONE) {
+  /* point hit */
+}
+
+cgfx_window_set_focus_widget(win, some_widget);
+
+cgfx_event ev;
+while (cgfx_next_event_into(ctx, &ev)) {
+  if (ev.type == CGFX_EVENT_KEY) {
+    cgfx_widget_id who = ev.payload.key.target_widget;
+    (void)who;
+  }
+}
+```
+
+### Phase 4.1: tests
+
+- **`cgfx_widget_input_routing_test`** — hit depth, overlapping siblings + reparent z-order, focus validation helper.
 
 ## Prerequisites
 

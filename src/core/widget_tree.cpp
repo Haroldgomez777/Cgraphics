@@ -9,6 +9,46 @@ namespace {
 
 constexpr float kEpsilon = 1.0e-5f;
 
+bool logical_point_in_rect(int32_t x, int32_t y,
+                           const cgfx_layout_rect &r) noexcept {
+  if (r.width == 0U || r.height == 0U) {
+    return false;
+  }
+  const int64_t ix = static_cast<int64_t>(x);
+  const int64_t iy = static_cast<int64_t>(y);
+  const int64_t bx0 = static_cast<int64_t>(r.x);
+  const int64_t by0 = static_cast<int64_t>(r.y);
+  const int64_t bx1 = bx0 + static_cast<int64_t>(r.width);
+  const int64_t by1 = by0 + static_cast<int64_t>(r.height);
+  return ix >= bx0 && iy >= by0 && ix < bx1 && iy < by1;
+}
+
+uint64_t hit_test_recursive_idx(const WidgetTree &tree, size_t node_index,
+                               int32_t x, int32_t y) noexcept {
+  const std::vector<WidgetNode> &nodes = tree.nodes();
+  if (node_index >= nodes.size()) {
+    return CGFX_WIDGET_ID_NONE;
+  }
+  const WidgetNode &n = nodes[node_index];
+  if (!n.alive) {
+    return CGFX_WIDGET_ID_NONE;
+  }
+  if (!logical_point_in_rect(x, y, n.bounds)) {
+    return CGFX_WIDGET_ID_NONE;
+  }
+
+  /** Sibling overlap: children are probed from back to front of the storage order so the
+   *  last child is “on top” among siblings. */
+  for (auto it = n.children.rbegin(); it != n.children.rend(); ++it) {
+    const size_t c = *it;
+    const uint64_t deep = hit_test_recursive_idx(tree, c, x, y);
+    if (deep != CGFX_WIDGET_ID_NONE) {
+      return deep;
+    }
+  }
+  return n.id;
+}
+
 } // namespace
 
 WidgetTree::WidgetTree() {
@@ -264,6 +304,22 @@ cgfx_result WidgetTree::set_flex_shrink(uint64_t widget_id,
   }
   nodes_[idx].style.flex_shrink = flex_shrink;
   return CGFX_OK;
+}
+
+uint64_t WidgetTree::validated_widget_id_or_root(
+    uint64_t candidate) const noexcept {
+  size_t ix{};
+  if (try_widget_index(candidate, ix) == CGFX_OK) {
+    return candidate;
+  }
+  return root_id();
+}
+
+uint64_t WidgetTree::hit_test_logical(int32_t x, int32_t y) const noexcept {
+  if (nodes_.empty()) {
+    return CGFX_WIDGET_ID_NONE;
+  }
+  return hit_test_recursive_idx(*this, /*root_index=*/0, x, y);
 }
 
 cgfx_result WidgetTree::get_bounds(uint64_t widget_id,

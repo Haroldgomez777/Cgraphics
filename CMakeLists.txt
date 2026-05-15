@@ -104,4 +104,19 @@ if(CGFX_BUILD_TESTS)
   target_compile_options(cgfx_widget_layout_test PRIVATE
       $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall -Wextra -Wpedantic>)
   add_test(NAME cgfx_widget_layout_test COMMAND cgfx_widget_layout_test)
+
+  add_executable(cgfx_widget_input_routing_test tests/widget_input_routing_test.cpp
+      src/core/widget_tree.cpp
+      src/layout/flex_layout.cpp
+  )
+  target_include_directories(cgfx_widget_input_routing_test PRIVATE
+      "${CMAKE_CURRENT_SOURCE_DIR}/src"
+      "${CMAKE_CURRENT_SOURCE_DIR}/include"
+  )
+  set_target_properties(cgfx_widget_input_routing_test PROPERTIES
+      CXX_STANDARD 17
+      CXX_EXTENSIONS OFF)
+  target_compile_options(cgfx_widget_input_routing_test PRIVATE
+      $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall -Wextra -Wpedantic>)
+  add_test(NAME cgfx_widget_input_routing_test COMMAND cgfx_widget_input_routing_test)
 endif()

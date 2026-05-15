@@ -1,6 +1,7 @@
 #include "core/events/event_dispatch.hpp"
 
 #include "core/context.hpp"
+#include "core/window_impl.hpp"
 
 namespace cgfx {
 
@@ -21,8 +22,10 @@ void event_dispatch_resize(CgfxContext &ctx, CgfxWindow *window,
 void event_dispatch_mouse_move(CgfxContext &ctx, CgfxWindow *window, int32_t x,
                                int32_t y) {
   cgfx_event_mouse_move_payload p{};
+  p.target_widget = CGFX_WIDGET_ID_NONE;
   p.x = x;
   p.y = y;
+  routing_sync_pick_mouse_move_targets(window, &p);
   ctx.enqueue_event(InternalEvent::mouse_move(window, p));
 }
 
@@ -35,6 +38,8 @@ void event_dispatch_mouse_button(CgfxContext &ctx, CgfxWindow *window,
   p.action = action;
   p.x = x;
   p.y = y;
+  p.target_widget = CGFX_WIDGET_ID_NONE;
+  routing_sync_pick_mouse_button_targets(window, &p);
   ctx.enqueue_event(InternalEvent::mouse_button(window, p));
 }
 
@@ -42,10 +47,12 @@ void event_dispatch_key(CgfxContext &ctx, CgfxWindow *window, cgfx_key key,
                         uint32_t native_code, cgfx_input_action action,
                         int repeat) {
   cgfx_event_key_payload p{};
+  p.target_widget = CGFX_WIDGET_ID_NONE;
   p.key = key;
   p.native_code = native_code;
   p.action = action;
   p.repeat = repeat;
+  routing_pick_key_focus_targets(window, &p);
   ctx.enqueue_event(InternalEvent::key(window, p));
 }
 

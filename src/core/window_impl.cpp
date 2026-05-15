@@ -4,7 +4,9 @@
 
 namespace cgfx {
 
-CgfxWindow::CgfxWindow(CgfxContext *ctx) : ctx_(ctx) {}
+CgfxWindow::CgfxWindow(CgfxContext *ctx) : ctx_(ctx) {
+  focus_widget_id_raw_ = widget_tree_.root_id();
+}
 
 CgfxWindow::~CgfxWindow() { shutdown(); }
 
@@ -125,6 +127,69 @@ void CgfxWindow::end_present_pass() {
   }
   command_list_.reset();
   presenting_ = false;
+}
+
+void CgfxWindow::sync_widget_layout_logical_from_surface() noexcept {
+  if (!surface_) {
+    return;
+  }
+  uint32_t w = 0U;
+  uint32_t h = 0U;
+  if (surface_->query_size_px(&w, &h) != CGFX_OK) {
+    return;
+  }
+  run_flex_layout(widget_tree_mut(), w, h);
+}
+
+cgfx_result CgfxWindow::assign_focus_widget_logical(cgfx_widget_id id) noexcept {
+  const cgfx_widget_id root = widget_tree_.root_id();
+  if (id == CGFX_WIDGET_ID_NONE || id == root) {
+    focus_widget_id_raw_ = root;
+    return CGFX_OK;
+  }
+  size_t ignore{};
+  if (widget_tree_.index_of_widget(id, ignore) != CGFX_OK) {
+    return CGFX_ERROR_INVALID_ARGUMENT;
+  }
+  focus_widget_id_raw_ = id;
+  return CGFX_OK;
+}
+
+void CgfxWindow::reconcile_focus_after_structure_change() noexcept {
+  focus_widget_id_raw_ =
+      widget_tree_.validated_widget_id_or_root(focus_widget_id_raw_);
+}
+
+void routing_sync_pick_mouse_move_targets(CgfxWindow *w,
+                                          cgfx_event_mouse_move_payload *p) {
+  if (!w || !p) {
+    return;
+  }
+  w->sync_widget_layout_logical_from_surface();
+  p->target_widget = w->widget_tree().hit_test_logical(p->x, p->y);
+}
+
+void routing_sync_pick_mouse_button_targets(
+    CgfxWindow *w, cgfx_event_mouse_button_payload *p) {
+  if (!w || !p) {
+    return;
+  }
+  w->sync_widget_layout_logical_from_surface();
+  const cgfx_widget_id hit = w->widget_tree().hit_test_logical(p->x, p->y);
+  p->target_widget = hit;
+
+  /** Primary-pointer press adopts focus for routed key stream (Phase 4.1). */
+  if (p->action == CGFX_PRESS && hit != CGFX_WIDGET_ID_NONE) {
+    (void)w->assign_focus_widget_logical(hit);
+  }
+}
+
+void routing_pick_key_focus_targets(CgfxWindow *w,
+                                    cgfx_event_key_payload *p) {
+  if (!w || !p) {
+    return;
+  }
+  p->target_widget = w->resolved_focus_widget_id();
 }
 
 } // namespace cgfx
