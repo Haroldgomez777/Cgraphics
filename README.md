@@ -1,4 +1,4 @@
-# cgfx (Phase 2 + Phase 3 events)
+# cgfx (Phase 2 → Phase 4 layout)
 
 `cgfx` is a cross-platform GUI graphics framework in C/C++.
 
@@ -16,6 +16,7 @@ Phase 3 hardens **event ingestion and delivery**:
 - Typed internal representation (`InternalEvent`) with centralized **dispatch enqueue** helpers used by Win32/X11 backends (no duplicated queue wiring).
 - `EventQueue` with explicit **ordering (FIFO)**; **capacity** (~4 096 pending slots by default, configurable); **resize coalescing** for the same window (successive resize storms collapse to the latest payload in one queue slot).
 - Overflow policy: **`CGFX_EVENT_QUEUE_OVERFLOW_DROP_OLDEST`** (default) frees the stalest event before accepting a newcomer, or **`CGFX_EVENT_QUEUE_OVERFLOW_DROP_NEWEST`** to keep the backlog and reject bursts; both increment **`cgfx_context_event_queue_drop_count`** for observability.
+- The undersized dequeue retry path (**`cgfx_next_event`**) re-queues via **`push_priority_front`**, which now **respects `max_depth` by dropping the youngest tail slots** instead of permitting unbounded deque growth.
 
 ### Phase 3: using events from C
 
@@ -37,7 +38,55 @@ cgfx_context_set_event_resize_coalesce(ctx, true);
 ### Phase 3: tests
 
 - `cgfx_minimal_shutdown` — library smoke load.
-- **`cgfx_event_queue_test`** — ordering, resize coalesce, DROP_OLDEST / DROP_NEWEST (no window or GPU required).
+- **`cgfx_event_queue_test`** — ordering, resize coalesce, DROP_OLDEST / DROP_NEWEST, bounded priority re-queue coverage (no window or GPU required).
+
+### Phase 4: widget tree + flex layout baseline
+
+Production-oriented **retained-mode tree**, **deterministic Phase 4 flex layout**, and **per-frame synchronization** wired before render recording:
+
+| Layer | Responsibility |
+| --- | --- |
+| **`src/core/widget_tree`** | Stable `cgfx_widget_id` handles (`uint64_t`), persistent parent/sibling ordering, subtree destroy semantics, validated reparent guards (no ancestor/descendant cycles). |
+| **`src/layout/flex_layout`** | Row/column directional containers over logical pixel sizes, **`AUTO`** vs **`FIXED`** sizing knobs, proportional **grow/shrink**, absolute bounds written as **`cgfx_layout_rect`**. |
+
+Layout runs immediately after the platform **`begin_present`** surface dimensions are sampled and **before** any render commands enqueue for that pass (Phase 4 currently maps logical pixels directly to framebuffer pixels; DPI-awareness is slated for Phase 4.1).
+
+Minimal C bindings (additive to earlier phases):
+
+- **Lookup root:** `cgfx_window_widget_root`
+- **Structural ops:** `cgfx_widget_create_child`, `cgfx_widget_destroy`, `cgfx_widget_reparent`
+- **Sizing & flex knobs:** `cgfx_widget_set_width|height`, `cgfx_widget_set_layout_axis`, `cgfx_widget_set_flex_grow|shrink`
+- **Per-frame rects:** `cgfx_widget_bounds_logical_px`
+
+Example sketch (pseudo-C):
+
+```c
+cgfx_widget_id root = cgfx_window_widget_root(win);
+
+cgfx_widget_id stripe = 0;
+cgfx_widget_create_child(win, root, &stripe);
+cgfx_widget_set_layout_axis(win, stripe, CGFX_LAYOUT_AXIS_ROW);
+
+cgfx_widget_id left_panel = 0;
+cgfx_widget_create_child(win, stripe, &left_panel);
+cgfx_widget_set_width(win, left_panel, CGFX_LAYOUT_SIZE_FIXED, 240);
+cgfx_widget_set_height(win, left_panel, CGFX_LAYOUT_SIZE_AUTO, 0);
+
+cgfx_widget_id filler = 0;
+cgfx_widget_create_child(win, stripe, &filler);
+cgfx_widget_set_width(win, filler, CGFX_LAYOUT_SIZE_AUTO, 0);
+cgfx_widget_set_flex_grow(win, filler, 1.0f);
+
+/* After cgfx_window_begin_present_pass(...) each frame ... */
+cgfx_layout_rect filler_bounds;
+if (cgfx_widget_bounds_logical_px(win, filler, &filler_bounds) == CGFX_OK) {
+    /* feeder for future painters / clipping */
+}
+```
+
+### Phase 4: tests
+
+- **`cgfx_widget_layout_test`** — tree lifecycle + grow/shrink flex scenarios without booting GPU surfaces.
 
 ## Prerequisites
 
@@ -140,8 +189,9 @@ The library baseline is considered stable when all of these pass:
 
 - `include/cgfx/` - public C headers
 - `src/api/` - C API entry points
-- `src/core/` - context + window core internals
+- `src/core/` - context + window internals + **`widget_tree`**
+- `src/layout/` - Phase 4 flex sizing / measurement engine
 - `src/platform/` - Win32/X11 platform backends
 - `src/render/` - minimal OpenGL surface/present helpers
 - `examples/` - demo app
-- `tests/` - smoke tests + Phase 3 `event_queue` unit test
+- `tests/` - smoke tests + **`event_queue_test`** + **`widget_layout_test`**

@@ -67,6 +67,13 @@ void EventQueue::push(InternalEvent ev) {
 }
 
 void EventQueue::push_priority_front(const InternalEvent &ev) {
+  // Re-queue path must stay bounded: a caller could spam this without reaching
+  // max_depth (normal pushes coalesce evictions). Evict from the tail so the
+  // retried head event always fits without unbounded deque growth.
+  while (!queue_.empty() && queue_.size() >= max_depth_) {
+    queue_.pop_back();
+    dropped_events_ += 1;
+  }
   queue_.push_front(ev);
 }
 

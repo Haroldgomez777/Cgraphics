@@ -2,6 +2,7 @@
 
 #include <cgfx/cgfx_api.h>
 
+#include "core/widget_tree.hpp"
 #include "render/render_command_list.hpp"
 #include "render/render_device.hpp"
 
@@ -80,11 +81,15 @@ public:
                                               size_t stride_bytes);
   void end_present_pass();
 
+  WidgetTree &widget_tree_mut() noexcept { return widget_tree_; }
+  const WidgetTree &widget_tree() const noexcept { return widget_tree_; }
+
 private:
   CgfxContext *ctx_{};
   std::unique_ptr<PlatformSurface> surface_{};
   std::unique_ptr<RenderDevice> render_device_{};
   RenderCommandList command_list_{};
+  WidgetTree widget_tree_{};
   bool presenting_{false};
 };
 

@@ -359,4 +359,109 @@ cgfx_result cgfx_window_get_dpi_scale(const cgfx_window *window,
   return surface->query_dpi_scale(out_scale);
 }
 
+cgfx_widget_id cgfx_window_widget_root(const cgfx_window *window) {
+  if (!window) {
+    return 0;
+  }
+  const cgfx::CgfxWindow *w =
+      cgfx::CgfxWindow::from_opaque(const_cast<cgfx_window *>(window));
+  return w->widget_tree().root_id();
+}
+
+cgfx_result cgfx_widget_create_child(cgfx_window *window,
+                                     cgfx_widget_id parent_id,
+                                     cgfx_widget_id *out_child_id) {
+  if (!window || !out_child_id) {
+    return CGFX_ERROR_INVALID_ARGUMENT;
+  }
+  cgfx::CgfxWindow *w = cgfx::CgfxWindow::from_opaque(window);
+  return w->widget_tree_mut().create_child(parent_id,
+                                            reinterpret_cast<uint64_t *>(out_child_id));
+}
+
+cgfx_result cgfx_widget_destroy(cgfx_window *window, cgfx_widget_id widget_id) {
+  if (!window) {
+    return CGFX_ERROR_INVALID_ARGUMENT;
+  }
+  cgfx::CgfxWindow *w = cgfx::CgfxWindow::from_opaque(window);
+  return w->widget_tree_mut().destroy_subtree(widget_id);
+}
+
+cgfx_result cgfx_widget_reparent(cgfx_window *window,
+                                 cgfx_widget_id widget_id,
+                                 cgfx_widget_id new_parent_id) {
+  if (!window) {
+    return CGFX_ERROR_INVALID_ARGUMENT;
+  }
+  cgfx::CgfxWindow *w = cgfx::CgfxWindow::from_opaque(window);
+  return w->widget_tree_mut().set_parent(widget_id, new_parent_id);
+}
+
+cgfx_result cgfx_widget_set_layout_axis(cgfx_window *window,
+                                        cgfx_widget_id widget_id,
+                                        cgfx_layout_axis axis) {
+  if (!window) {
+    return CGFX_ERROR_INVALID_ARGUMENT;
+  }
+  return cgfx::CgfxWindow::from_opaque(window)
+      ->widget_tree_mut()
+      .set_layout_axis(widget_id, axis);
+}
+
+cgfx_result cgfx_widget_set_width(cgfx_window *window,
+                                cgfx_widget_id widget_id,
+                                cgfx_layout_size_kind kind, uint32_t fixed_px) {
+  if (!window) {
+    return CGFX_ERROR_INVALID_ARGUMENT;
+  }
+  return cgfx::CgfxWindow::from_opaque(window)
+      ->widget_tree_mut()
+      .set_width(widget_id, kind, fixed_px);
+}
+
+cgfx_result cgfx_widget_set_height(cgfx_window *window,
+                                   cgfx_widget_id widget_id,
+                                   cgfx_layout_size_kind kind,
+                                   uint32_t fixed_px) {
+  if (!window) {
+    return CGFX_ERROR_INVALID_ARGUMENT;
+  }
+  return cgfx::CgfxWindow::from_opaque(window)
+      ->widget_tree_mut()
+      .set_height(widget_id, kind, fixed_px);
+}
+
+cgfx_result cgfx_widget_set_flex_grow(cgfx_window *window,
+                                      cgfx_widget_id widget_id,
+                                      float flex_grow) {
+  if (!window) {
+    return CGFX_ERROR_INVALID_ARGUMENT;
+  }
+  return cgfx::CgfxWindow::from_opaque(window)
+      ->widget_tree_mut()
+      .set_flex_grow(widget_id, flex_grow);
+}
+
+cgfx_result cgfx_widget_set_flex_shrink(cgfx_window *window,
+                                        cgfx_widget_id widget_id,
+                                        float flex_shrink) {
+  if (!window) {
+    return CGFX_ERROR_INVALID_ARGUMENT;
+  }
+  return cgfx::CgfxWindow::from_opaque(window)
+      ->widget_tree_mut()
+      .set_flex_shrink(widget_id, flex_shrink);
+}
+
+cgfx_result cgfx_widget_bounds_logical_px(const cgfx_window *window,
+                                          cgfx_widget_id widget_id,
+                                          cgfx_layout_rect *out_bounds) {
+  if (!window) {
+    return CGFX_ERROR_INVALID_ARGUMENT;
+  }
+  const cgfx::CgfxWindow *w =
+      cgfx::CgfxWindow::from_opaque(const_cast<cgfx_window *>(window));
+  return w->widget_tree().get_bounds(widget_id, out_bounds);
+}
+
 } // extern "C"

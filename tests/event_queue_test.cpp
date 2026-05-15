@@ -84,6 +84,28 @@ int main() {
     assert(sv->payload.x == 3);
   }
 
+  // push_priority_front stays within max_depth (tail eviction + drop stat)
+  {
+    EventQueue q;
+    q.set_max_depth(2);
+    q.set_coalesce_resize(false);
+    q.set_overflow_policy(EventQueueOverflowPolicy::DropOldest);
+    q.push(move_evt(wnd, 1, 1));
+    q.push(move_evt(wnd, 2, 2));
+    q.push_priority_front(move_evt(wnd, 9, 9));
+    assert(q.size() == 2);
+    assert(q.dropped_event_count() == 1);
+    InternalEvent a{};
+    InternalEvent b{};
+    assert(q.pop(a));
+    assert(q.pop(b));
+    auto *av = std::get_if<cgfx::EventMouseMove>(&a.body);
+    auto *bv = std::get_if<cgfx::EventMouseMove>(&b.body);
+    assert(av && bv);
+    assert(av->payload.x == 9);
+    assert(bv->payload.x == 1);
+  }
+
   // DROP_NEWEST rejects under back-pressure
   {
     EventQueue q;

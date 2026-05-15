@@ -250,6 +250,66 @@ CGFX_API cgfx_result cgfx_window_get_size_pixels(const cgfx_window *window,
 CGFX_API cgfx_result cgfx_window_get_dpi_scale(const cgfx_window *window,
                                                float *out_scale);
 
+/* ---- Phase 4: retained widget tree + flex layout foundation ---- */
+
+typedef uint64_t cgfx_widget_id;
+
+typedef struct cgfx_layout_rect {
+  int32_t x;
+  int32_t y;
+  uint32_t width;
+  uint32_t height;
+} cgfx_layout_rect;
+
+typedef enum cgfx_layout_axis {
+  CGFX_LAYOUT_AXIS_ROW = 0,
+  CGFX_LAYOUT_AXIS_COLUMN = 1,
+} cgfx_layout_axis;
+
+typedef enum cgfx_layout_size_kind {
+  CGFX_LAYOUT_SIZE_AUTO = 0,
+  CGFX_LAYOUT_SIZE_FIXED = 1,
+} cgfx_layout_size_kind;
+
+CGFX_API cgfx_widget_id cgfx_window_widget_root(const cgfx_window *window);
+
+CGFX_API cgfx_result cgfx_widget_create_child(cgfx_window *window,
+                                              cgfx_widget_id parent_id,
+                                              cgfx_widget_id *out_child_id);
+
+CGFX_API cgfx_result cgfx_widget_destroy(cgfx_window *window,
+                                         cgfx_widget_id widget_id);
+
+CGFX_API cgfx_result cgfx_widget_reparent(cgfx_window *window,
+                                          cgfx_widget_id widget_id,
+                                          cgfx_widget_id new_parent_id);
+
+CGFX_API cgfx_result cgfx_widget_set_layout_axis(cgfx_window *window,
+                                                 cgfx_widget_id widget_id,
+                                                 cgfx_layout_axis axis);
+
+CGFX_API cgfx_result cgfx_widget_set_width(cgfx_window *window,
+                                         cgfx_widget_id widget_id,
+                                         cgfx_layout_size_kind kind,
+                                         uint32_t fixed_px);
+
+CGFX_API cgfx_result cgfx_widget_set_height(cgfx_window *window,
+                                          cgfx_widget_id widget_id,
+                                          cgfx_layout_size_kind kind,
+                                          uint32_t fixed_px);
+
+CGFX_API cgfx_result cgfx_widget_set_flex_grow(cgfx_window *window,
+                                             cgfx_widget_id widget_id,
+                                             float flex_grow);
+
+CGFX_API cgfx_result cgfx_widget_set_flex_shrink(cgfx_window *window,
+                                                 cgfx_widget_id widget_id,
+                                                 float flex_shrink);
+
+CGFX_API cgfx_result cgfx_widget_bounds_logical_px(const cgfx_window *window,
+                                                   cgfx_widget_id widget_id,
+                                                   cgfx_layout_rect *out_bounds);
+
 #ifdef __cplusplus
 }
 #endif

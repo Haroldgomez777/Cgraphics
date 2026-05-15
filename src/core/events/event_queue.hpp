@@ -34,8 +34,9 @@ public:
   bool coalesce_resize() const noexcept { return coalesce_resize_; }
 
   void push(InternalEvent ev);
-  /** Re-queue an event at the front (used when the user buffer is undersized).
-   *  Does not apply max-depth/eviction rules so the dequeue can retry safely. */
+  /** Re-queue at the front after an undersized dequeue buffer peek. Mirrors
+   * max_depth by evicting the newest tail slots and counting drops so the deque
+   * stays bounded even if callers mis-use the fast path repeatedly. */
   void push_priority_front(const InternalEvent &ev);
 
   bool pop(InternalEvent &out);

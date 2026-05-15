@@ -1,5 +1,6 @@
 #include "core/window_impl.hpp"
 #include "core/context.hpp"
+#include "layout/flex_layout.hpp"
 
 namespace cgfx {
 
@@ -53,6 +54,8 @@ cgfx_result CgfxWindow::begin_present_pass(uint32_t *out_width_px,
   if (rc != CGFX_OK) {
     return rc;
   }
+
+  run_flex_layout(widget_tree_, frame.width_px, frame.height_px);
 
   rc = render_device_->begin_frame(frame);
   if (rc != CGFX_OK) {
