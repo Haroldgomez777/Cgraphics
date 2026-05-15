@@ -20,27 +20,59 @@
 
 namespace cgfx::win32_detail {
 
-static void EnableHighDpiAwarenessBestEffort() noexcept {
+template <typename Fn>
+static Fn GetUser32Proc(const char *name) noexcept {
   HMODULE user32 = ::GetModuleHandleW(L"user32.dll");
-  if (!user32) {
-    return;
+  if (!user32 || !name) {
+    return nullptr;
   }
 
-  auto set_pm_v2 =
-      reinterpret_cast<decltype(&::SetProcessDpiAwarenessContext)>(
-          ::GetProcAddress(user32, "SetProcessDpiAwarenessContext"));
+#if defined(__GNUC__) || defined(__clang__)
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wcast-function-type"
+#endif
+  return reinterpret_cast<Fn>(::GetProcAddress(user32, name));
+#if defined(__GNUC__) || defined(__clang__)
+#pragma GCC diagnostic pop
+#endif
+}
+
+static UINT QueryWindowDpi(HWND hwnd, HDC hdc) noexcept {
+  if (!hwnd || !hdc) {
+    return 96U;
+  }
+
+  UINT dpi = static_cast<UINT>(
+      std::ceil(static_cast<double>(::GetDeviceCaps(hdc, LOGPIXELSX))));
+
+  using GetDpiForWindowFn = UINT(WINAPI *)(HWND hwnd_in);
+  GetDpiForWindowFn get_dpi = GetUser32Proc<GetDpiForWindowFn>("GetDpiForWindow");
+  if (get_dpi != nullptr) {
+    dpi = (std::max)(dpi, get_dpi(hwnd));
+  }
+
+  return dpi;
+}
+
+static void EnableHighDpiAwarenessBestEffort() noexcept {
+  using SetProcessDpiAwarenessContextFn = BOOL(WINAPI *)(HANDLE);
+  SetProcessDpiAwarenessContextFn set_pm_v2 =
+      GetUser32Proc<SetProcessDpiAwarenessContextFn>(
+          "SetProcessDpiAwarenessContext");
   if (set_pm_v2) {
-#if defined(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2)
-    if (set_pm_v2(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2)) {
+    // -4 maps to DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2.
+    const HANDLE kPerMonitorAwareV2 =
+        reinterpret_cast<HANDLE>(static_cast<LONG_PTR>(-4));
+    if (set_pm_v2(kPerMonitorAwareV2)) {
       return;
     }
-#endif
   }
 
-  auto set_dd = reinterpret_cast<decltype(&::SetProcessDPIAware)>(
-      ::GetProcAddress(user32, "SetProcessDPIAware"));
+  using SetProcessDpiAwareFn = BOOL(WINAPI *)();
+  SetProcessDpiAwareFn set_dd =
+      GetUser32Proc<SetProcessDpiAwareFn>("SetProcessDPIAware");
   if (set_dd) {
-    set_dd();
+    (void)set_dd();
   }
 }
 
@@ -480,16 +512,7 @@ public:
       return CGFX_ERROR_PLATFORM;
     }
 
-    UINT dpi = static_cast<UINT>(
-        std::ceil(static_cast<double>(::GetDeviceCaps(hdc_, LOGPIXELSX))));
-
-    using GetDpiForWindowFn = UINT(WINAPI *)(HWND hwnd_in);
-    static auto get_dpi = reinterpret_cast<GetDpiForWindowFn>(
-        ::GetProcAddress(::GetModuleHandleW(L"user32.dll"), "GetDpiForWindow"));
-
-    if (get_dpi != nullptr && hwnd_ != nullptr) {
-      dpi = (std::max)(dpi, get_dpi(hwnd_));
-    }
+    const UINT dpi = QueryWindowDpi(hwnd_, hdc_);
 
     float scale =
         static_cast<float>(dpi) / static_cast<float>(96); // NOLINT
@@ -564,16 +587,7 @@ public:
       return CGFX_ERROR_PLATFORM;
     }
 
-    UINT dpi = static_cast<UINT>(
-        std::ceil(static_cast<double>(::GetDeviceCaps(hdc_, LOGPIXELSX))));
-
-    using GetDpiForWindowFn = UINT(WINAPI *)(HWND hwnd_in);
-    static auto get_dpi = reinterpret_cast<GetDpiForWindowFn>(
-        ::GetProcAddress(::GetModuleHandleW(L"user32.dll"), "GetDpiForWindow"));
-
-    if (get_dpi != nullptr) {
-      dpi = (std::max)(dpi, get_dpi(hwnd_));
-    }
+    const UINT dpi = QueryWindowDpi(hwnd_, hdc_);
 
     float scale =
         static_cast<float>(dpi) / static_cast<float>(96); // NOLINT
