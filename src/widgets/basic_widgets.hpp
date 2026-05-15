@@ -11,7 +11,18 @@
 
 namespace cgfx {
 
+struct UiTheme;
+class WidgetStyleOverrides;
+
 class CgfxWindow;
+
+/** Phase 6 style debug: hypothetical button face resolution (mirrors paint combiner). */
+enum class ButtonFaceQueryScenario : uint8_t {
+  Normal = 0,
+  Hovered = 1,
+  Pressed = 2,
+  Disabled = 3,
+};
 
 struct WidgetClickSynthesisResult {
   bool should_emit = false;
@@ -21,41 +32,28 @@ struct WidgetClickSynthesisResult {
 enum class BasicWidgetKind : uint8_t { Panel = 1, Label = 2, Button = 3 };
 
 struct PanelFacet {
-  float bg_r = 0.18f;
-  float bg_g = 0.18f;
-  float bg_b = 0.2f;
+  /** When false, Phase 6 paint uses live `UiTheme.panel_background`. */
+  bool bg_explicit = false;
+  float bg_r = 0.f;
+  float bg_g = 0.f;
+  float bg_b = 0.f;
   float bg_a = 1.f;
 };
 
 struct LabelFacet {
   /** UTF-8 bytestring; full text shaping/raster deferred (Phase 5 placeholder paint). */
   std::string text_utf8{};
-  /** Small marker underline when text is assigned (observable sans text engine). */
-  float marker_r = 0.85f;
-  float marker_g = 0.85f;
-  float marker_b = 0.9f;
+  /** When false, marker uses `UiTheme.label_placeholder`. */
+  bool marker_explicit = false;
+  float marker_r = 0.f;
+  float marker_g = 0.f;
+  float marker_b = 0.f;
   float marker_a = 1.f;
 };
 
 struct ButtonFacet {
   std::string caption_utf8{};
   bool enabled = true;
-  float bg_normal_r = 0.35f;
-  float bg_normal_g = 0.38f;
-  float bg_normal_b = 0.45f;
-  float bg_hover_r = 0.45f;
-  float bg_hover_g = 0.5f;
-  float bg_hover_b = 0.58f;
-  float bg_pressed_r = 0.28f;
-  float bg_pressed_g = 0.3f;
-  float bg_pressed_b = 0.36f;
-  float bg_disabled_r = 0.25f;
-  float bg_disabled_g = 0.25f;
-  float bg_disabled_b = 0.27f;
-  float caption_marker_r = 0.92f;
-  float caption_marker_g = 0.92f;
-  float caption_marker_b = 0.96f;
-  float caption_marker_a = 1.f;
 };
 
 struct BasicFacetUnion {
@@ -68,7 +66,8 @@ struct BasicFacetUnion {
 };
 
 /** Panel / Label / Button state layered on retained tree (Phase 5). Core layout stays in
- *  `WidgetTree`; this registry holds widget-specific visuals + interaction bookkeeping. */
+ *  `WidgetTree`; this registry holds widget-specific visuals + interaction bookkeeping.
+ *  Phase 6: `paint` consumes per-window `UiTheme` + `WidgetStyleOverrides`. */
 class BasicWidgets {
 public:
   cgfx_result create_panel(WidgetTree &tree, cgfx_widget_id parent_id,
@@ -101,7 +100,8 @@ public:
                                const cgfx_event_mouse_button_payload &p,
                                WidgetClickSynthesisResult *out_click) noexcept;
 
-  cgfx_result paint(const WidgetTree &tree, RenderCommandList &cmds);
+  cgfx_result paint(const WidgetTree &tree, RenderCommandList &cmds,
+                    const UiTheme &theme, const WidgetStyleOverrides &overrides);
 
   /** Property helpers (reject unknown / wrong kind). */
   cgfx_result set_visible(cgfx_widget_id id, bool visible) noexcept;
@@ -129,6 +129,45 @@ public:
   cgfx_widget_id pressed_capture_button_logical() const noexcept {
     return capture_button_logical_;
   }
+
+  cgfx_result query_resolved_panel_background_rgba_normalized(
+      cgfx_widget_id panel_id, const UiTheme &theme,
+      const WidgetStyleOverrides &overrides, float *out_r, float *out_g,
+      float *out_b, float *out_a) const noexcept;
+
+  cgfx_result query_resolved_label_placeholder_rgba_normalized(
+      cgfx_widget_id label_id, const UiTheme &theme,
+      const WidgetStyleOverrides &overrides, float *out_r, float *out_g,
+      float *out_b, float *out_a) const noexcept;
+
+  cgfx_result query_resolved_label_text_color_placeholder_rgba_normalized(
+      cgfx_widget_id label_id, const UiTheme &theme,
+      const WidgetStyleOverrides &overrides, float *out_r, float *out_g,
+      float *out_b, float *out_a) const noexcept;
+
+  cgfx_result query_resolved_label_font_size_sp_placeholder(
+      cgfx_widget_id label_id, const UiTheme &theme,
+      const WidgetStyleOverrides &overrides, float *out_sp) const noexcept;
+
+  cgfx_result query_resolved_button_face_rgba_normalized(
+      cgfx_widget_id button_id, const UiTheme &theme,
+      const WidgetStyleOverrides &overrides,
+      ButtonFaceQueryScenario scenario, float *out_r, float *out_g,
+      float *out_b, float *out_a) const noexcept;
+
+  cgfx_result query_resolved_button_caption_rgba_normalized(
+      cgfx_widget_id button_id, const UiTheme &theme,
+      const WidgetStyleOverrides &overrides, float *out_r, float *out_g,
+      float *out_b, float *out_a) const noexcept;
+
+  cgfx_result query_resolved_button_text_color_placeholder_rgba_normalized(
+      cgfx_widget_id button_id, const UiTheme &theme,
+      const WidgetStyleOverrides &overrides, float *out_r, float *out_g,
+      float *out_b, float *out_a) const noexcept;
+
+  cgfx_result query_resolved_button_font_size_sp_placeholder(
+      cgfx_widget_id button_id, const UiTheme &theme,
+      const WidgetStyleOverrides &overrides, float *out_sp) const noexcept;
 
 private:
   using Map = std::unordered_map<uint64_t, BasicFacetUnion>;

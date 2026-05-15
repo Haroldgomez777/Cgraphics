@@ -4,11 +4,17 @@
 
 #include "core/window_impl.hpp"
 
+#include "style/style_resolution.hpp"
+#include "style/ui_theme.hpp"
+#include "style/widget_style_overrides.hpp"
+
 
 
 #include <algorithm>
 
 #include <cmath>
+
+#include <cstdint>
 
 #include <cstring>
 
@@ -602,7 +608,11 @@ void BasicWidgets::on_mouse_button_logical(
 
 cgfx_result BasicWidgets::paint(const WidgetTree &tree,
 
-                                RenderCommandList &cmds) {
+                                RenderCommandList &cmds,
+
+                                const UiTheme &theme,
+
+                                const WidgetStyleOverrides &overrides) {
 
   if (tree.nodes().empty()) {
 
@@ -614,7 +624,16 @@ cgfx_result BasicWidgets::paint(const WidgetTree &tree,
 
   collect_alive_subtree_ordered_preorder(tree, /*root_index=*/0, order);
 
-
+  const uint32_t caption_pad_px = [] (const UiTheme &th) -> uint32_t {
+    double d = std::floor(static_cast<double>(th.padding_sm_px));
+    if (d < 1.0) {
+      d = 1.0;
+    }
+    if (!(d <= static_cast<double>(UINT32_MAX))) {
+      return UINT32_MAX;
+    }
+    return static_cast<uint32_t>(d);
+  }(theme);
 
   for (uint64_t raw_id : order) {
 
@@ -643,7 +662,7 @@ cgfx_result BasicWidgets::paint(const WidgetTree &tree,
 
     }
 
-
+    const WidgetStyleOverrideRecord *rec = overrides.try_get(id);
 
     switch (it->second.kind) {
 
@@ -651,9 +670,13 @@ cgfx_result BasicWidgets::paint(const WidgetTree &tree,
 
       const PanelFacet &pn = it->second.panel;
 
-      (void)cmds.append_fill_rect(r.x, r.y, r.width, r.height, pn.bg_r, pn.bg_g,
+      const RgbaNormalized bc = style_resolution::resolve_panel_background(
 
-                                  pn.bg_b, pn.bg_a);
+          theme, rec, pn);
+
+      (void)cmds.append_fill_rect(r.x, r.y, r.width, r.height, bc.r, bc.g,
+
+                                  bc.b, bc.a);
 
       break;
 
@@ -685,9 +708,13 @@ cgfx_result BasicWidgets::paint(const WidgetTree &tree,
 
           static_cast<int32_t>(strip_h);
 
-      (void)cmds.append_fill_rect(sx, sy, strip_w, strip_h, lb.marker_r,
+      const RgbaNormalized mc =
 
-                                  lb.marker_g, lb.marker_b, lb.marker_a);
+          style_resolution::resolve_label_placeholder(theme, rec, lb);
+
+      (void)cmds.append_fill_rect(sx, sy, strip_w, strip_h, mc.r, mc.g, mc.b,
+
+                                  mc.a);
 
       break;
 
@@ -697,45 +724,25 @@ cgfx_result BasicWidgets::paint(const WidgetTree &tree,
 
       const ButtonFacet &bt = it->second.button;
 
-      float cr = bt.bg_normal_r;
+      const bool hovered = (hovered_button_logical_ == id);
 
-      float cg = bt.bg_normal_g;
+      const bool pressed =
 
-      float cb = bt.bg_normal_b;
+          (capture_button_logical_ == id && left_pressed_on_capture_);
 
-      float ca = 1.f;
+      const RgbaNormalized face = style_resolution::resolve_button_face_background(
 
-      if (!bt.enabled) {
+          theme, rec, bt.enabled, hovered, pressed);
 
-        cr = bt.bg_disabled_r;
+      (void)cmds.append_fill_rect(r.x, r.y, r.width, r.height, face.r, face.g,
 
-        cg = bt.bg_disabled_g;
-
-        cb = bt.bg_disabled_b;
-
-      } else if (capture_button_logical_ == id && left_pressed_on_capture_) {
-
-        cr = bt.bg_pressed_r;
-
-        cg = bt.bg_pressed_g;
-
-        cb = bt.bg_pressed_b;
-
-      } else if (hovered_button_logical_ == id) {
-
-        cr = bt.bg_hover_r;
-
-        cg = bt.bg_hover_g;
-
-        cb = bt.bg_hover_b;
-
-      }
-
-      (void)cmds.append_fill_rect(r.x, r.y, r.width, r.height, cr, cg, cb, ca);
+                                  face.b, face.a);
 
       if (!bt.caption_utf8.empty()) {
 
-        const uint32_t inner_w = r.width > 8U ? r.width - 8U : r.width;
+        const uint32_t inner_w =
+
+            r.width > caption_pad_px * 2U ? r.width - caption_pad_px * 2U : r.width;
 
         const uint32_t strip_w =
 
@@ -751,11 +758,13 @@ cgfx_result BasicWidgets::paint(const WidgetTree &tree,
 
             r.y + static_cast<int32_t>((r.height - strip_h) / 2U);
 
-        (void)cmds.append_fill_rect(sx, sy, strip_w, strip_h,
+        const RgbaNormalized cap =
 
-                                    bt.caption_marker_r, bt.caption_marker_g,
+            style_resolution::resolve_button_caption_placeholder(theme, rec);
 
-                                    bt.caption_marker_b, bt.caption_marker_a);
+        (void)cmds.append_fill_rect(sx, sy, strip_w, strip_h, cap.r, cap.g,
+
+                                    cap.b, cap.a);
 
       }
 
@@ -853,6 +862,8 @@ cgfx_result BasicWidgets::set_panel_background_rgba(cgfx_widget_id id, float r,
   it->second.panel.bg_b = b;
 
   it->second.panel.bg_a = a;
+
+  it->second.panel.bg_explicit = true;
 
   return CGFX_OK;
 
@@ -1081,6 +1092,354 @@ cgfx_result BasicWidgets::get_button_enabled(cgfx_widget_id id,
   }
 
   *out = it->second.button.enabled;
+
+  return CGFX_OK;
+
+}
+
+
+
+cgfx_result BasicWidgets::query_resolved_panel_background_rgba_normalized(
+
+    cgfx_widget_id panel_id, const UiTheme &theme,
+
+    const WidgetStyleOverrides &overrides, float *out_r, float *out_g,
+
+    float *out_b, float *out_a) const noexcept {
+
+  if (!out_r || !out_g || !out_b || !out_a) {
+
+    return CGFX_ERROR_INVALID_ARGUMENT;
+
+  }
+
+  const auto it = facets_.find(panel_id);
+
+  if (it == facets_.end() || it->second.kind != BasicWidgetKind::Panel) {
+
+    return CGFX_ERROR_INVALID_ARGUMENT;
+
+  }
+
+  const WidgetStyleOverrideRecord *rec = overrides.try_get(panel_id);
+
+  const RgbaNormalized c = style_resolution::resolve_panel_background(
+
+      theme, rec, it->second.panel);
+
+  *out_r = c.r;
+
+  *out_g = c.g;
+
+  *out_b = c.b;
+
+  *out_a = c.a;
+
+  return CGFX_OK;
+
+}
+
+
+
+cgfx_result BasicWidgets::query_resolved_label_placeholder_rgba_normalized(
+
+    cgfx_widget_id label_id, const UiTheme &theme,
+
+    const WidgetStyleOverrides &overrides, float *out_r, float *out_g,
+
+    float *out_b, float *out_a) const noexcept {
+
+  if (!out_r || !out_g || !out_b || !out_a) {
+
+    return CGFX_ERROR_INVALID_ARGUMENT;
+
+  }
+
+  const auto it = facets_.find(label_id);
+
+  if (it == facets_.end() || it->second.kind != BasicWidgetKind::Label) {
+
+    return CGFX_ERROR_INVALID_ARGUMENT;
+
+  }
+
+  const WidgetStyleOverrideRecord *rec = overrides.try_get(label_id);
+
+  const RgbaNormalized c = style_resolution::resolve_label_placeholder(
+
+      theme, rec, it->second.label);
+
+  *out_r = c.r;
+
+  *out_g = c.g;
+
+  *out_b = c.b;
+
+  *out_a = c.a;
+
+  return CGFX_OK;
+
+}
+
+
+
+cgfx_result BasicWidgets::query_resolved_label_text_color_placeholder_rgba_normalized(
+
+    cgfx_widget_id label_id, const UiTheme &theme,
+
+    const WidgetStyleOverrides &overrides, float *out_r, float *out_g,
+
+    float *out_b, float *out_a) const noexcept {
+
+  if (!out_r || !out_g || !out_b || !out_a) {
+
+    return CGFX_ERROR_INVALID_ARGUMENT;
+
+  }
+
+  const auto it = facets_.find(label_id);
+
+  if (it == facets_.end() || it->second.kind != BasicWidgetKind::Label) {
+
+    return CGFX_ERROR_INVALID_ARGUMENT;
+
+  }
+
+  const WidgetStyleOverrideRecord *rec = overrides.try_get(label_id);
+
+  const RgbaNormalized c =
+
+      style_resolution::resolve_label_text_color(theme, rec);
+
+  *out_r = c.r;
+
+  *out_g = c.g;
+
+  *out_b = c.b;
+
+  *out_a = c.a;
+
+  return CGFX_OK;
+
+}
+
+
+
+cgfx_result BasicWidgets::query_resolved_label_font_size_sp_placeholder(
+
+    cgfx_widget_id label_id, const UiTheme &theme,
+
+    const WidgetStyleOverrides &overrides, float *out_sp) const noexcept {
+
+  if (!out_sp) {
+
+    return CGFX_ERROR_INVALID_ARGUMENT;
+
+  }
+
+  const auto it = facets_.find(label_id);
+
+  if (it == facets_.end() || it->second.kind != BasicWidgetKind::Label) {
+
+    return CGFX_ERROR_INVALID_ARGUMENT;
+
+  }
+
+  const WidgetStyleOverrideRecord *rec = overrides.try_get(label_id);
+
+  *out_sp = style_resolution::resolve_label_font_size_sp(theme, rec);
+
+  return CGFX_OK;
+
+}
+
+
+
+cgfx_result BasicWidgets::query_resolved_button_face_rgba_normalized(
+
+    cgfx_widget_id button_id, const UiTheme &theme,
+
+    const WidgetStyleOverrides &overrides, ButtonFaceQueryScenario scenario,
+
+    float *out_r, float *out_g, float *out_b, float *out_a) const noexcept {
+
+  if (!out_r || !out_g || !out_b || !out_a) {
+
+    return CGFX_ERROR_INVALID_ARGUMENT;
+
+  }
+
+  const auto it = facets_.find(button_id);
+
+  if (it == facets_.end() || it->second.kind != BasicWidgetKind::Button) {
+
+    return CGFX_ERROR_INVALID_ARGUMENT;
+
+  }
+
+  const ButtonFacet &bt = it->second.button;
+
+  bool enabled = bt.enabled;
+
+  bool hovered = false;
+
+  bool pressed = false;
+
+  switch (scenario) {
+
+  case ButtonFaceQueryScenario::Disabled:
+
+    enabled = false;
+
+    break;
+
+  case ButtonFaceQueryScenario::Hovered:
+
+    hovered = true;
+
+    break;
+
+  case ButtonFaceQueryScenario::Pressed:
+
+    pressed = true;
+
+    break;
+
+  case ButtonFaceQueryScenario::Normal:
+
+  default:
+
+    break;
+
+  }
+
+  const WidgetStyleOverrideRecord *rec = overrides.try_get(button_id);
+
+  const RgbaNormalized c = style_resolution::resolve_button_face_background(
+
+      theme, rec, enabled, hovered, pressed);
+
+  *out_r = c.r;
+
+  *out_g = c.g;
+
+  *out_b = c.b;
+
+  *out_a = c.a;
+
+  return CGFX_OK;
+
+}
+
+
+
+cgfx_result BasicWidgets::query_resolved_button_caption_rgba_normalized(
+
+    cgfx_widget_id button_id, const UiTheme &theme,
+
+    const WidgetStyleOverrides &overrides, float *out_r, float *out_g,
+
+    float *out_b, float *out_a) const noexcept {
+
+  if (!out_r || !out_g || !out_b || !out_a) {
+
+    return CGFX_ERROR_INVALID_ARGUMENT;
+
+  }
+
+  const auto it = facets_.find(button_id);
+
+  if (it == facets_.end() || it->second.kind != BasicWidgetKind::Button) {
+
+    return CGFX_ERROR_INVALID_ARGUMENT;
+
+  }
+
+  const WidgetStyleOverrideRecord *rec = overrides.try_get(button_id);
+
+  const RgbaNormalized c =
+
+      style_resolution::resolve_button_caption_placeholder(theme, rec);
+
+  *out_r = c.r;
+
+  *out_g = c.g;
+
+  *out_b = c.b;
+
+  *out_a = c.a;
+
+  return CGFX_OK;
+
+}
+
+
+
+cgfx_result BasicWidgets::query_resolved_button_text_color_placeholder_rgba_normalized(
+
+    cgfx_widget_id button_id, const UiTheme &theme,
+
+    const WidgetStyleOverrides &overrides, float *out_r, float *out_g,
+
+    float *out_b, float *out_a) const noexcept {
+
+  if (!out_r || !out_g || !out_b || !out_a) {
+
+    return CGFX_ERROR_INVALID_ARGUMENT;
+
+  }
+
+  const auto it = facets_.find(button_id);
+
+  if (it == facets_.end() || it->second.kind != BasicWidgetKind::Button) {
+
+    return CGFX_ERROR_INVALID_ARGUMENT;
+
+  }
+
+  const WidgetStyleOverrideRecord *rec = overrides.try_get(button_id);
+
+  const RgbaNormalized c =
+
+      style_resolution::resolve_button_text_color_placeholder(theme, rec);
+
+  *out_r = c.r;
+
+  *out_g = c.g;
+
+  *out_b = c.b;
+
+  *out_a = c.a;
+
+  return CGFX_OK;
+
+}
+
+
+
+cgfx_result BasicWidgets::query_resolved_button_font_size_sp_placeholder(
+
+    cgfx_widget_id button_id, const UiTheme &theme,
+
+    const WidgetStyleOverrides &overrides, float *out_sp) const noexcept {
+
+  if (!out_sp) {
+
+    return CGFX_ERROR_INVALID_ARGUMENT;
+
+  }
+
+  const auto it = facets_.find(button_id);
+
+  if (it == facets_.end() || it->second.kind != BasicWidgetKind::Button) {
+
+    return CGFX_ERROR_INVALID_ARGUMENT;
+
+  }
+
+  const WidgetStyleOverrideRecord *rec = overrides.try_get(button_id);
+
+  *out_sp = style_resolution::resolve_button_font_size_sp(theme, rec);
 
   return CGFX_OK;
 

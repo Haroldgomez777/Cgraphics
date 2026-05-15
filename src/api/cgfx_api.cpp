@@ -3,6 +3,8 @@
 #include "core/context.hpp"
 #include "core/events/internal_event.hpp"
 #include "core/window_impl.hpp"
+#include "style/ui_theme.hpp"
+#include "style/widget_style_overrides.hpp"
 #include "widgets/basic_widgets.hpp"
 
 #include <cstring>
@@ -127,6 +129,118 @@ bool dequeue_event_copy_payload_try(cgfx::CgfxContext *ctx_impl,
   *window_handle = w ? w->opaque() : nullptr;
 
   return true;
+}
+
+cgfx::RgbaNormalized *mutable_theme_color(cgfx::UiTheme &th,
+                                          cgfx_theme_color_token token) noexcept {
+  switch (token) {
+  case CGFX_THEME_COLOR_PANEL_BACKGROUND:
+    return &th.panel_background;
+  case CGFX_THEME_COLOR_LABEL_TEXT:
+    return &th.label_text_color;
+  case CGFX_THEME_COLOR_LABEL_PLACEHOLDER:
+    return &th.label_placeholder;
+  case CGFX_THEME_COLOR_BUTTON_BACKGROUND_NORMAL:
+    return &th.button_background_normal;
+  case CGFX_THEME_COLOR_BUTTON_BACKGROUND_HOVER:
+    return &th.button_background_hover;
+  case CGFX_THEME_COLOR_BUTTON_BACKGROUND_PRESSED:
+    return &th.button_background_pressed;
+  case CGFX_THEME_COLOR_BUTTON_BACKGROUND_DISABLED:
+    return &th.button_background_disabled;
+  case CGFX_THEME_COLOR_BUTTON_CAPTION_PLACEHOLDER:
+    return &th.button_caption_placeholder;
+  case CGFX_THEME_COLOR_BUTTON_TEXT:
+    return &th.button_text_color;
+  default:
+    return nullptr;
+  }
+}
+
+const cgfx::RgbaNormalized *
+const_theme_color(const cgfx::UiTheme &th,
+                  cgfx_theme_color_token token) noexcept {
+  return mutable_theme_color(const_cast<cgfx::UiTheme &>(th), token);
+}
+
+cgfx_result set_theme_metric(cgfx::UiTheme &th, cgfx_theme_metric_token token,
+                             float metric) noexcept {
+  switch (token) {
+  case CGFX_THEME_METRIC_LABEL_FONT_SIZE_SP:
+    th.label_font_size_sp = metric;
+    return CGFX_OK;
+  case CGFX_THEME_METRIC_BUTTON_FONT_SIZE_SP:
+    th.button_font_size_sp = metric;
+    return CGFX_OK;
+  case CGFX_THEME_METRIC_SPACING_UNIT_PX:
+    th.spacing_unit_px = metric;
+    return CGFX_OK;
+  case CGFX_THEME_METRIC_PADDING_SM_PX:
+    th.padding_sm_px = metric;
+    return CGFX_OK;
+  case CGFX_THEME_METRIC_PADDING_MD_PX:
+    th.padding_md_px = metric;
+    return CGFX_OK;
+  default:
+    return CGFX_ERROR_INVALID_ARGUMENT;
+  }
+}
+
+cgfx_result get_theme_metric(const cgfx::UiTheme &th, cgfx_theme_metric_token token,
+                             float *out) noexcept {
+  if (!out) {
+    return CGFX_ERROR_INVALID_ARGUMENT;
+  }
+  switch (token) {
+  case CGFX_THEME_METRIC_LABEL_FONT_SIZE_SP:
+    *out = th.label_font_size_sp;
+    return CGFX_OK;
+  case CGFX_THEME_METRIC_BUTTON_FONT_SIZE_SP:
+    *out = th.button_font_size_sp;
+    return CGFX_OK;
+  case CGFX_THEME_METRIC_SPACING_UNIT_PX:
+    *out = th.spacing_unit_px;
+    return CGFX_OK;
+  case CGFX_THEME_METRIC_PADDING_SM_PX:
+    *out = th.padding_sm_px;
+    return CGFX_OK;
+  case CGFX_THEME_METRIC_PADDING_MD_PX:
+    *out = th.padding_md_px;
+    return CGFX_OK;
+  default:
+    return CGFX_ERROR_INVALID_ARGUMENT;
+  }
+}
+
+void rgba_to_c(const cgfx::RgbaNormalized &c, cgfx_color_rgba *out) noexcept {
+  out->r = c.r;
+  out->g = c.g;
+  out->b = c.b;
+  out->a = c.a;
+}
+
+cgfx::ButtonFaceQueryScenario
+map_button_face_query(cgfx_button_face_query_scenario scenario) noexcept {
+  switch (scenario) {
+  case CGFX_BUTTON_FACE_QUERY_NORMAL:
+    return cgfx::ButtonFaceQueryScenario::Normal;
+  case CGFX_BUTTON_FACE_QUERY_HOVERED:
+    return cgfx::ButtonFaceQueryScenario::Hovered;
+  case CGFX_BUTTON_FACE_QUERY_PRESSED:
+    return cgfx::ButtonFaceQueryScenario::Pressed;
+  case CGFX_BUTTON_FACE_QUERY_DISABLED:
+    return cgfx::ButtonFaceQueryScenario::Disabled;
+  default:
+    return cgfx::ButtonFaceQueryScenario::Normal;
+  }
+}
+
+cgfx::UiTheme *unwrap_theme_mut(cgfx_theme *t) noexcept {
+  return reinterpret_cast<cgfx::UiTheme *>(t);
+}
+
+const cgfx::UiTheme *unwrap_theme_const(const cgfx_theme *t) noexcept {
+  return reinterpret_cast<const cgfx::UiTheme *>(t);
 }
 
 } // namespace
@@ -483,6 +597,7 @@ cgfx_result cgfx_widget_destroy(cgfx_window *window, cgfx_widget_id widget_id) {
     return CGFX_ERROR_INVALID_ARGUMENT;
   }
   cgfx::CgfxWindow *w = cgfx::CgfxWindow::from_opaque(window);
+  w->widget_style_overrides_mut().purge_subtree(w->widget_tree(), widget_id);
   w->basic_widgets_mut().purge_subtree(w->widget_tree(), widget_id);
   const cgfx_result r = w->widget_tree_mut().destroy_subtree(widget_id);
   if (r == CGFX_OK) {
@@ -789,6 +904,439 @@ cgfx_result cgfx_basic_widget_utf8_text_get(cgfx_window *window,
   }
   return w->basic_widgets().get_utf8_text(widget_id, kk, out_bytes,
                                          out_capacity, out_written_including_null);
+}
+
+cgfx_result cgfx_theme_create(cgfx_theme **out_theme) {
+  if (!out_theme) {
+    return CGFX_ERROR_INVALID_ARGUMENT;
+  }
+  *out_theme = nullptr;
+  try {
+    auto *p = new cgfx::UiTheme(cgfx::UiTheme::make_phase5_builtin());
+    *out_theme = reinterpret_cast<cgfx_theme *>(p);
+    return CGFX_OK;
+  } catch (...) {
+    return CGFX_ERROR_OUT_OF_MEMORY;
+  }
+}
+
+void cgfx_theme_destroy(cgfx_theme *theme) {
+  delete unwrap_theme_mut(theme);
+}
+
+cgfx_result cgfx_theme_reset_to_defaults(cgfx_theme *theme) {
+  if (!theme) {
+    return CGFX_ERROR_INVALID_ARGUMENT;
+  }
+  *unwrap_theme_mut(theme) = cgfx::UiTheme::make_phase5_builtin();
+  return CGFX_OK;
+}
+
+cgfx_result cgfx_theme_set_color_rgba(cgfx_theme *theme, cgfx_theme_color_token token,
+                                      const cgfx_color_rgba *color) {
+  if (!theme || !color) {
+    return CGFX_ERROR_INVALID_ARGUMENT;
+  }
+  cgfx::RgbaNormalized *slot = mutable_theme_color(*unwrap_theme_mut(theme), token);
+  if (!slot) {
+    return CGFX_ERROR_INVALID_ARGUMENT;
+  }
+  slot->r = color->r;
+  slot->g = color->g;
+  slot->b = color->b;
+  slot->a = color->a;
+  return CGFX_OK;
+}
+
+cgfx_result cgfx_theme_get_color_rgba(const cgfx_theme *theme,
+                                      cgfx_theme_color_token token,
+                                      cgfx_color_rgba *out_color) {
+  if (!theme || !out_color) {
+    return CGFX_ERROR_INVALID_ARGUMENT;
+  }
+  const cgfx::RgbaNormalized *slot =
+      const_theme_color(*unwrap_theme_const(theme), token);
+  if (!slot) {
+    return CGFX_ERROR_INVALID_ARGUMENT;
+  }
+  rgba_to_c(*slot, out_color);
+  return CGFX_OK;
+}
+
+cgfx_result cgfx_theme_set_metric(cgfx_theme *theme, cgfx_theme_metric_token token,
+                                  float metric) {
+  if (!theme) {
+    return CGFX_ERROR_INVALID_ARGUMENT;
+  }
+  return set_theme_metric(*unwrap_theme_mut(theme), token, metric);
+}
+
+cgfx_result cgfx_theme_get_metric(const cgfx_theme *theme,
+                                  cgfx_theme_metric_token token, float *out_metric) {
+  if (!theme) {
+    return CGFX_ERROR_INVALID_ARGUMENT;
+  }
+  return get_theme_metric(*unwrap_theme_const(theme), token, out_metric);
+}
+
+cgfx_result cgfx_window_theme_reset_to_defaults(cgfx_window *window) {
+  if (!window) {
+    return CGFX_ERROR_INVALID_ARGUMENT;
+  }
+  cgfx::CgfxWindow *w = cgfx::CgfxWindow::from_opaque(window);
+  w->ui_theme_mut() = cgfx::UiTheme::make_phase5_builtin();
+  return CGFX_OK;
+}
+
+cgfx_result cgfx_window_theme_set_color_rgba(
+    cgfx_window *window, cgfx_theme_color_token token,
+    const cgfx_color_rgba *color) {
+  if (!window || !color) {
+    return CGFX_ERROR_INVALID_ARGUMENT;
+  }
+  cgfx::RgbaNormalized *slot =
+      mutable_theme_color(cgfx::CgfxWindow::from_opaque(window)->ui_theme_mut(), token);
+  if (!slot) {
+    return CGFX_ERROR_INVALID_ARGUMENT;
+  }
+  slot->r = color->r;
+  slot->g = color->g;
+  slot->b = color->b;
+  slot->a = color->a;
+  return CGFX_OK;
+}
+
+cgfx_result cgfx_window_theme_get_color_rgba(const cgfx_window *window,
+                                             cgfx_theme_color_token token,
+                                             cgfx_color_rgba *out_color) {
+  if (!window || !out_color) {
+    return CGFX_ERROR_INVALID_ARGUMENT;
+  }
+  const cgfx::RgbaNormalized *slot = const_theme_color(
+      cgfx::CgfxWindow::from_opaque(const_cast<cgfx_window *>(window))->ui_theme(),
+      token);
+  if (!slot) {
+    return CGFX_ERROR_INVALID_ARGUMENT;
+  }
+  rgba_to_c(*slot, out_color);
+  return CGFX_OK;
+}
+
+cgfx_result cgfx_window_theme_set_metric(cgfx_window *window,
+                                         cgfx_theme_metric_token token,
+                                         float metric) {
+  if (!window) {
+    return CGFX_ERROR_INVALID_ARGUMENT;
+  }
+  return set_theme_metric(cgfx::CgfxWindow::from_opaque(window)->ui_theme_mut(), token,
+                          metric);
+}
+
+cgfx_result cgfx_window_theme_get_metric(const cgfx_window *window,
+                                         cgfx_theme_metric_token token,
+                                         float *out_metric) {
+  if (!window) {
+    return CGFX_ERROR_INVALID_ARGUMENT;
+  }
+  return get_theme_metric(
+      cgfx::CgfxWindow::from_opaque(const_cast<cgfx_window *>(window))->ui_theme(), token,
+      out_metric);
+}
+
+cgfx_result cgfx_window_theme_apply(cgfx_window *window, const cgfx_theme *theme) {
+  if (!window || !theme) {
+    return CGFX_ERROR_INVALID_ARGUMENT;
+  }
+  cgfx::CgfxWindow::from_opaque(window)->ui_theme_mut() = *unwrap_theme_const(theme);
+  return CGFX_OK;
+}
+
+cgfx_result cgfx_window_theme_copy_to(const cgfx_window *window,
+                                      cgfx_theme *out_theme) {
+  if (!window || !out_theme) {
+    return CGFX_ERROR_INVALID_ARGUMENT;
+  }
+  *unwrap_theme_mut(out_theme) =
+      cgfx::CgfxWindow::from_opaque(const_cast<cgfx_window *>(window))->ui_theme();
+  return CGFX_OK;
+}
+
+cgfx_result cgfx_widget_style_set_panel_background_rgba_normalized(
+    cgfx_window *window, cgfx_widget_id widget_id, float r, float g, float b, float a) {
+  if (!window) {
+    return CGFX_ERROR_INVALID_ARGUMENT;
+  }
+  return cgfx::CgfxWindow::from_opaque(window)
+      ->widget_style_overrides_mut()
+      .set_panel_background(widget_id, r, g, b, a);
+}
+
+cgfx_result cgfx_widget_style_set_label_placeholder_rgba_normalized(
+    cgfx_window *window, cgfx_widget_id label_id, float r, float g, float b, float a) {
+  if (!window) {
+    return CGFX_ERROR_INVALID_ARGUMENT;
+  }
+  return cgfx::CgfxWindow::from_opaque(window)
+      ->widget_style_overrides_mut()
+      .set_label_placeholder_color(label_id, r, g, b, a);
+}
+
+cgfx_result cgfx_widget_style_set_label_text_placeholder_rgba_normalized(
+    cgfx_window *window, cgfx_widget_id label_id, float r, float g, float b, float a) {
+  if (!window) {
+    return CGFX_ERROR_INVALID_ARGUMENT;
+  }
+  return cgfx::CgfxWindow::from_opaque(window)
+      ->widget_style_overrides_mut()
+      .set_label_text_placeholder(label_id, r, g, b, a);
+}
+
+cgfx_result cgfx_widget_style_set_label_font_size_sp_placeholder(
+    cgfx_window *window, cgfx_widget_id label_id, float font_size_sp) {
+  if (!window) {
+    return CGFX_ERROR_INVALID_ARGUMENT;
+  }
+  return cgfx::CgfxWindow::from_opaque(window)
+      ->widget_style_overrides_mut()
+      .set_label_font_size_sp(label_id, font_size_sp);
+}
+
+cgfx_result cgfx_widget_style_set_button_background_normal_rgba_normalized(
+    cgfx_window *window, cgfx_widget_id button_id, float r, float g, float b, float a) {
+  if (!window) {
+    return CGFX_ERROR_INVALID_ARGUMENT;
+  }
+  return cgfx::CgfxWindow::from_opaque(window)
+      ->widget_style_overrides_mut()
+      .set_button_background_normal(button_id, r, g, b, a);
+}
+
+cgfx_result cgfx_widget_style_set_button_background_hover_rgba_normalized(
+    cgfx_window *window, cgfx_widget_id button_id, float r, float g, float b, float a) {
+  if (!window) {
+    return CGFX_ERROR_INVALID_ARGUMENT;
+  }
+  return cgfx::CgfxWindow::from_opaque(window)
+      ->widget_style_overrides_mut()
+      .set_button_background_hover(button_id, r, g, b, a);
+}
+
+cgfx_result cgfx_widget_style_set_button_background_pressed_rgba_normalized(
+    cgfx_window *window, cgfx_widget_id button_id, float r, float g, float b, float a) {
+  if (!window) {
+    return CGFX_ERROR_INVALID_ARGUMENT;
+  }
+  return cgfx::CgfxWindow::from_opaque(window)
+      ->widget_style_overrides_mut()
+      .set_button_background_pressed(button_id, r, g, b, a);
+}
+
+cgfx_result cgfx_widget_style_set_button_background_disabled_rgba_normalized(
+    cgfx_window *window, cgfx_widget_id button_id, float r, float g, float b, float a) {
+  if (!window) {
+    return CGFX_ERROR_INVALID_ARGUMENT;
+  }
+  return cgfx::CgfxWindow::from_opaque(window)
+      ->widget_style_overrides_mut()
+      .set_button_background_disabled(button_id, r, g, b, a);
+}
+
+cgfx_result cgfx_widget_style_set_button_caption_placeholder_rgba_normalized(
+    cgfx_window *window, cgfx_widget_id button_id, float r, float g, float b, float a) {
+  if (!window) {
+    return CGFX_ERROR_INVALID_ARGUMENT;
+  }
+  return cgfx::CgfxWindow::from_opaque(window)
+      ->widget_style_overrides_mut()
+      .set_button_caption_placeholder(button_id, r, g, b, a);
+}
+
+cgfx_result cgfx_widget_style_set_button_text_placeholder_rgba_normalized(
+    cgfx_window *window, cgfx_widget_id button_id, float r, float g, float b, float a) {
+  if (!window) {
+    return CGFX_ERROR_INVALID_ARGUMENT;
+  }
+  return cgfx::CgfxWindow::from_opaque(window)
+      ->widget_style_overrides_mut()
+      .set_button_text_placeholder(button_id, r, g, b, a);
+}
+
+cgfx_result cgfx_widget_style_set_button_font_size_sp_placeholder(
+    cgfx_window *window, cgfx_widget_id button_id, float font_size_sp) {
+  if (!window) {
+    return CGFX_ERROR_INVALID_ARGUMENT;
+  }
+  return cgfx::CgfxWindow::from_opaque(window)
+      ->widget_style_overrides_mut()
+      .set_button_font_size_sp(button_id, font_size_sp);
+}
+
+cgfx_result cgfx_widget_style_clear_overrides(cgfx_window *window,
+                                              cgfx_widget_id widget_id,
+                                              uint32_t mask_bits) {
+  if (!window) {
+    return CGFX_ERROR_INVALID_ARGUMENT;
+  }
+  cgfx::CgfxWindow::from_opaque(window)
+      ->widget_style_overrides_mut()
+      .clear(widget_id, mask_bits);
+  return CGFX_OK;
+}
+
+cgfx_result cgfx_widget_style_clear_all_overrides(cgfx_window *window,
+                                                cgfx_widget_id widget_id) {
+  if (!window) {
+    return CGFX_ERROR_INVALID_ARGUMENT;
+  }
+  cgfx::CgfxWindow::from_opaque(window)
+      ->widget_style_overrides_mut()
+      .clear_all(widget_id);
+  return CGFX_OK;
+}
+
+cgfx_result cgfx_widget_style_query_resolved_panel_background_rgba_normalized(
+    cgfx_window *window, cgfx_widget_id panel_id, cgfx_color_rgba *out_color) {
+  if (!window || !out_color) {
+    return CGFX_ERROR_INVALID_ARGUMENT;
+  }
+  cgfx::CgfxWindow *w = cgfx::CgfxWindow::from_opaque(window);
+  float r{}, g{}, b{}, a{};
+  const cgfx_result rc =
+      w->basic_widgets().query_resolved_panel_background_rgba_normalized(
+          panel_id, w->ui_theme(), w->widget_style_overrides(), &r, &g, &b, &a);
+  if (rc != CGFX_OK) {
+    return rc;
+  }
+  out_color->r = r;
+  out_color->g = g;
+  out_color->b = b;
+  out_color->a = a;
+  return CGFX_OK;
+}
+
+cgfx_result cgfx_widget_style_query_resolved_label_placeholder_rgba_normalized(
+    cgfx_window *window, cgfx_widget_id label_id, cgfx_color_rgba *out_color) {
+  if (!window || !out_color) {
+    return CGFX_ERROR_INVALID_ARGUMENT;
+  }
+  cgfx::CgfxWindow *w = cgfx::CgfxWindow::from_opaque(window);
+  float r{}, g{}, b{}, a{};
+  const cgfx_result rc =
+      w->basic_widgets().query_resolved_label_placeholder_rgba_normalized(
+          label_id, w->ui_theme(), w->widget_style_overrides(), &r, &g, &b, &a);
+  if (rc != CGFX_OK) {
+    return rc;
+  }
+  out_color->r = r;
+  out_color->g = g;
+  out_color->b = b;
+  out_color->a = a;
+  return CGFX_OK;
+}
+
+cgfx_result
+cgfx_widget_style_query_resolved_label_text_color_placeholder_rgba_normalized(
+    cgfx_window *window, cgfx_widget_id label_id, cgfx_color_rgba *out_color) {
+  if (!window || !out_color) {
+    return CGFX_ERROR_INVALID_ARGUMENT;
+  }
+  cgfx::CgfxWindow *w = cgfx::CgfxWindow::from_opaque(window);
+  float r{}, g{}, b{}, a{};
+  const cgfx_result rc =
+      w->basic_widgets().query_resolved_label_text_color_placeholder_rgba_normalized(
+          label_id, w->ui_theme(), w->widget_style_overrides(), &r, &g, &b, &a);
+  if (rc != CGFX_OK) {
+    return rc;
+  }
+  out_color->r = r;
+  out_color->g = g;
+  out_color->b = b;
+  out_color->a = a;
+  return CGFX_OK;
+}
+
+cgfx_result cgfx_widget_style_query_resolved_label_font_size_sp_placeholder(
+    cgfx_window *window, cgfx_widget_id label_id, float *out_font_size_sp) {
+  if (!window || !out_font_size_sp) {
+    return CGFX_ERROR_INVALID_ARGUMENT;
+  }
+  cgfx::CgfxWindow *w = cgfx::CgfxWindow::from_opaque(window);
+  return w->basic_widgets().query_resolved_label_font_size_sp_placeholder(
+      label_id, w->ui_theme(), w->widget_style_overrides(), out_font_size_sp);
+}
+
+cgfx_result cgfx_widget_style_query_resolved_button_face_rgba_normalized(
+    cgfx_window *window, cgfx_widget_id button_id,
+    cgfx_button_face_query_scenario scenario, cgfx_color_rgba *out_color) {
+  if (!window || !out_color) {
+    return CGFX_ERROR_INVALID_ARGUMENT;
+  }
+  cgfx::CgfxWindow *w = cgfx::CgfxWindow::from_opaque(window);
+  float r{}, g{}, b{}, a{};
+  const cgfx_result rc =
+      w->basic_widgets().query_resolved_button_face_rgba_normalized(
+          button_id, w->ui_theme(), w->widget_style_overrides(),
+          map_button_face_query(scenario), &r, &g, &b, &a);
+  if (rc != CGFX_OK) {
+    return rc;
+  }
+  out_color->r = r;
+  out_color->g = g;
+  out_color->b = b;
+  out_color->a = a;
+  return CGFX_OK;
+}
+
+cgfx_result
+cgfx_widget_style_query_resolved_button_caption_placeholder_rgba_normalized(
+    cgfx_window *window, cgfx_widget_id button_id, cgfx_color_rgba *out_color) {
+  if (!window || !out_color) {
+    return CGFX_ERROR_INVALID_ARGUMENT;
+  }
+  cgfx::CgfxWindow *w = cgfx::CgfxWindow::from_opaque(window);
+  float r{}, g{}, b{}, a{};
+  const cgfx_result rc =
+      w->basic_widgets().query_resolved_button_caption_rgba_normalized(
+          button_id, w->ui_theme(), w->widget_style_overrides(), &r, &g, &b, &a);
+  if (rc != CGFX_OK) {
+    return rc;
+  }
+  out_color->r = r;
+  out_color->g = g;
+  out_color->b = b;
+  out_color->a = a;
+  return CGFX_OK;
+}
+
+cgfx_result
+cgfx_widget_style_query_resolved_button_text_placeholder_rgba_normalized(
+    cgfx_window *window, cgfx_widget_id button_id, cgfx_color_rgba *out_color) {
+  if (!window || !out_color) {
+    return CGFX_ERROR_INVALID_ARGUMENT;
+  }
+  cgfx::CgfxWindow *w = cgfx::CgfxWindow::from_opaque(window);
+  float r{}, g{}, b{}, a{};
+  const cgfx_result rc =
+      w->basic_widgets().query_resolved_button_text_color_placeholder_rgba_normalized(
+          button_id, w->ui_theme(), w->widget_style_overrides(), &r, &g, &b, &a);
+  if (rc != CGFX_OK) {
+    return rc;
+  }
+  out_color->r = r;
+  out_color->g = g;
+  out_color->b = b;
+  out_color->a = a;
+  return CGFX_OK;
+}
+
+cgfx_result cgfx_widget_style_query_resolved_button_font_size_sp_placeholder(
+    cgfx_window *window, cgfx_widget_id button_id, float *out_font_size_sp) {
+  if (!window || !out_font_size_sp) {
+    return CGFX_ERROR_INVALID_ARGUMENT;
+  }
+  cgfx::CgfxWindow *w = cgfx::CgfxWindow::from_opaque(window);
+  return w->basic_widgets().query_resolved_button_font_size_sp_placeholder(
+      button_id, w->ui_theme(), w->widget_style_overrides(), out_font_size_sp);
 }
 
 } // extern "C"

@@ -422,11 +422,11 @@ CGFX_API cgfx_result cgfx_basic_widget_button_create(cgfx_window *window,
                                                      cgfx_widget_id parent_id,
                                                      cgfx_widget_id *out_id);
 
-/** Record default visuals for facets into the Phase 2 command list — call each frame inside
+/** Record basic-widget visuals for facets into the Phase 2 command list — call each frame inside
  *  `cgfx_window_begin_present_pass` / `cgfx_window_end_present_pass`.
  *
- * Labels render UTF-8 as a clipped placeholder underscore today; wire real shaping next in
- *  the text subsystem (Phase 6/7 roadmap). */
+ * Colors resolve from per-window theme tokens + stylesheet overrides (Phase 6). Labels still render
+ * UTF-8 via a clipped placeholder strip until the Phase 7 text subsystem lands. */
 CGFX_API cgfx_result cgfx_window_draw_basic_widgets(cgfx_window *window);
 
 CGFX_API cgfx_result cgfx_basic_widget_set_visible(cgfx_window *window,
@@ -461,6 +461,165 @@ CGFX_API cgfx_result cgfx_basic_widget_utf8_text_get(cgfx_window *window,
                                                     char *out_bytes,
                                                     size_t out_capacity,
                                                     size_t *out_written_including_null);
+
+/* ---- Phase 6: theming + per-widget style overrides (resolved at paint time) ---- */
+
+typedef struct cgfx_color_rgba {
+  float r;
+  float g;
+  float b;
+  float a;
+} cgfx_color_rgba;
+
+typedef enum cgfx_theme_color_token {
+  CGFX_THEME_COLOR_PANEL_BACKGROUND = 0,
+  CGFX_THEME_COLOR_LABEL_TEXT = 1,
+  CGFX_THEME_COLOR_LABEL_PLACEHOLDER = 2,
+  CGFX_THEME_COLOR_BUTTON_BACKGROUND_NORMAL = 3,
+  CGFX_THEME_COLOR_BUTTON_BACKGROUND_HOVER = 4,
+  CGFX_THEME_COLOR_BUTTON_BACKGROUND_PRESSED = 5,
+  CGFX_THEME_COLOR_BUTTON_BACKGROUND_DISABLED = 6,
+  CGFX_THEME_COLOR_BUTTON_CAPTION_PLACEHOLDER = 7,
+  CGFX_THEME_COLOR_BUTTON_TEXT = 8,
+} cgfx_theme_color_token;
+
+typedef enum cgfx_theme_metric_token {
+  CGFX_THEME_METRIC_LABEL_FONT_SIZE_SP = 0,
+  CGFX_THEME_METRIC_BUTTON_FONT_SIZE_SP = 1,
+  CGFX_THEME_METRIC_SPACING_UNIT_PX = 2,
+  CGFX_THEME_METRIC_PADDING_SM_PX = 3,
+  CGFX_THEME_METRIC_PADDING_MD_PX = 4,
+} cgfx_theme_metric_token;
+
+/** Opaque editable theme snapshot (heap-allocated). Combine with
+ *  `cgfx_window_theme_apply` / `cgfx_window_theme_copy_to` to share presets. */
+typedef struct cgfx_theme cgfx_theme;
+
+CGFX_API cgfx_result cgfx_theme_create(cgfx_theme **out_theme);
+CGFX_API void cgfx_theme_destroy(cgfx_theme *theme);
+
+/** Restores built-in Phase 5 parity defaults (same as a fresh window). */
+CGFX_API cgfx_result cgfx_theme_reset_to_defaults(cgfx_theme *theme);
+
+CGFX_API cgfx_result cgfx_theme_set_color_rgba(cgfx_theme *theme,
+                                               cgfx_theme_color_token token,
+                                               const cgfx_color_rgba *color);
+CGFX_API cgfx_result cgfx_theme_get_color_rgba(const cgfx_theme *theme,
+                                               cgfx_theme_color_token token,
+                                               cgfx_color_rgba *out_color);
+
+CGFX_API cgfx_result cgfx_theme_set_metric(cgfx_theme *theme,
+                                           cgfx_theme_metric_token token,
+                                           float metric);
+CGFX_API cgfx_result cgfx_theme_get_metric(const cgfx_theme *theme,
+                                           cgfx_theme_metric_token token,
+                                           float *out_metric);
+
+CGFX_API cgfx_result cgfx_window_theme_reset_to_defaults(cgfx_window *window);
+CGFX_API cgfx_result cgfx_window_theme_set_color_rgba(
+    cgfx_window *window, cgfx_theme_color_token token, const cgfx_color_rgba *color);
+CGFX_API cgfx_result cgfx_window_theme_get_color_rgba(
+    const cgfx_window *window, cgfx_theme_color_token token,
+    cgfx_color_rgba *out_color);
+CGFX_API cgfx_result cgfx_window_theme_set_metric(cgfx_window *window,
+                                                  cgfx_theme_metric_token token,
+                                                  float metric);
+CGFX_API cgfx_result cgfx_window_theme_get_metric(
+    const cgfx_window *window, cgfx_theme_metric_token token, float *out_metric);
+
+/** Deep-copies token values into the window (visible on the next present pass). */
+CGFX_API cgfx_result cgfx_window_theme_apply(cgfx_window *window,
+                                             const cgfx_theme *theme);
+/** Copies the window's active tokens into @p out_theme. */
+CGFX_API cgfx_result cgfx_window_theme_copy_to(const cgfx_window *window,
+                                               cgfx_theme *out_theme);
+
+/** Bitmask for `cgfx_widget_style_clear_overrides` (combinable with bitwise OR). */
+typedef enum cgfx_widget_style_override_mask_bits {
+  CGFX_WIDGET_STYLE_OVERRIDE_NONE = 0,
+  CGFX_WIDGET_STYLE_OVERRIDE_PANEL_BACKGROUND = 1u << 0,
+  CGFX_WIDGET_STYLE_OVERRIDE_LABEL_PLACEHOLDER = 1u << 1,
+  CGFX_WIDGET_STYLE_OVERRIDE_LABEL_TEXT_COLOR = 1u << 2,
+  CGFX_WIDGET_STYLE_OVERRIDE_LABEL_FONT_SIZE_SP = 1u << 3,
+  CGFX_WIDGET_STYLE_OVERRIDE_BUTTON_BG_NORMAL = 1u << 4,
+  CGFX_WIDGET_STYLE_OVERRIDE_BUTTON_BG_HOVER = 1u << 5,
+  CGFX_WIDGET_STYLE_OVERRIDE_BUTTON_BG_PRESSED = 1u << 6,
+  CGFX_WIDGET_STYLE_OVERRIDE_BUTTON_BG_DISABLED = 1u << 7,
+  CGFX_WIDGET_STYLE_OVERRIDE_BUTTON_CAPTION = 1u << 8,
+  CGFX_WIDGET_STYLE_OVERRIDE_BUTTON_TEXT_COLOR = 1u << 9,
+  CGFX_WIDGET_STYLE_OVERRIDE_BUTTON_FONT_SIZE_SP = 1u << 10,
+} cgfx_widget_style_override_mask_bits;
+
+typedef enum cgfx_button_face_query_scenario {
+  CGFX_BUTTON_FACE_QUERY_NORMAL = 0,
+  CGFX_BUTTON_FACE_QUERY_HOVERED = 1,
+  CGFX_BUTTON_FACE_QUERY_PRESSED = 2,
+  CGFX_BUTTON_FACE_QUERY_DISABLED = 3,
+} cgfx_button_face_query_scenario;
+
+CGFX_API cgfx_result cgfx_widget_style_set_panel_background_rgba_normalized(
+    cgfx_window *window, cgfx_widget_id widget_id, float r, float g, float b, float a);
+
+CGFX_API cgfx_result cgfx_widget_style_set_label_placeholder_rgba_normalized(
+    cgfx_window *window, cgfx_widget_id label_id, float r, float g, float b, float a);
+
+CGFX_API cgfx_result cgfx_widget_style_set_label_text_placeholder_rgba_normalized(
+    cgfx_window *window, cgfx_widget_id label_id, float r, float g, float b, float a);
+
+CGFX_API cgfx_result cgfx_widget_style_set_label_font_size_sp_placeholder(
+    cgfx_window *window, cgfx_widget_id label_id, float font_size_sp);
+
+CGFX_API cgfx_result cgfx_widget_style_set_button_background_normal_rgba_normalized(
+    cgfx_window *window, cgfx_widget_id button_id, float r, float g, float b, float a);
+CGFX_API cgfx_result cgfx_widget_style_set_button_background_hover_rgba_normalized(
+    cgfx_window *window, cgfx_widget_id button_id, float r, float g, float b, float a);
+CGFX_API cgfx_result cgfx_widget_style_set_button_background_pressed_rgba_normalized(
+    cgfx_window *window, cgfx_widget_id button_id, float r, float g, float b, float a);
+CGFX_API cgfx_result cgfx_widget_style_set_button_background_disabled_rgba_normalized(
+    cgfx_window *window, cgfx_widget_id button_id, float r, float g, float b, float a);
+
+CGFX_API cgfx_result cgfx_widget_style_set_button_caption_placeholder_rgba_normalized(
+    cgfx_window *window, cgfx_widget_id button_id, float r, float g, float b, float a);
+
+CGFX_API cgfx_result cgfx_widget_style_set_button_text_placeholder_rgba_normalized(
+    cgfx_window *window, cgfx_widget_id button_id, float r, float g, float b, float a);
+
+CGFX_API cgfx_result cgfx_widget_style_set_button_font_size_sp_placeholder(
+    cgfx_window *window, cgfx_widget_id button_id, float font_size_sp);
+
+CGFX_API cgfx_result cgfx_widget_style_clear_overrides(cgfx_window *window,
+                                                       cgfx_widget_id widget_id,
+                                                       uint32_t mask_bits);
+CGFX_API cgfx_result cgfx_widget_style_clear_all_overrides(cgfx_window *window,
+                                                           cgfx_widget_id widget_id);
+
+CGFX_API cgfx_result cgfx_widget_style_query_resolved_panel_background_rgba_normalized(
+    cgfx_window *window, cgfx_widget_id panel_id, cgfx_color_rgba *out_color);
+
+CGFX_API cgfx_result cgfx_widget_style_query_resolved_label_placeholder_rgba_normalized(
+    cgfx_window *window, cgfx_widget_id label_id, cgfx_color_rgba *out_color);
+
+CGFX_API cgfx_result
+cgfx_widget_style_query_resolved_label_text_color_placeholder_rgba_normalized(
+    cgfx_window *window, cgfx_widget_id label_id, cgfx_color_rgba *out_color);
+
+CGFX_API cgfx_result cgfx_widget_style_query_resolved_label_font_size_sp_placeholder(
+    cgfx_window *window, cgfx_widget_id label_id, float *out_font_size_sp);
+
+CGFX_API cgfx_result cgfx_widget_style_query_resolved_button_face_rgba_normalized(
+    cgfx_window *window, cgfx_widget_id button_id,
+    cgfx_button_face_query_scenario scenario, cgfx_color_rgba *out_color);
+
+CGFX_API cgfx_result
+cgfx_widget_style_query_resolved_button_caption_placeholder_rgba_normalized(
+    cgfx_window *window, cgfx_widget_id button_id, cgfx_color_rgba *out_color);
+
+CGFX_API cgfx_result
+cgfx_widget_style_query_resolved_button_text_placeholder_rgba_normalized(
+    cgfx_window *window, cgfx_widget_id button_id, cgfx_color_rgba *out_color);
+
+CGFX_API cgfx_result cgfx_widget_style_query_resolved_button_font_size_sp_placeholder(
+    cgfx_window *window, cgfx_widget_id button_id, float *out_font_size_sp);
 
 #ifdef __cplusplus
 }

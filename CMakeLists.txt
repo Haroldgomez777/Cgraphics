@@ -18,6 +18,8 @@ set(CGFX_PUBLIC_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/include")
   src/core/widget_tree.cpp
   src/layout/flex_layout.cpp
   src/widgets/basic_widgets.cpp
+  src/style/ui_theme.cpp
+  src/style/widget_style_overrides.cpp
   src/core/events/internal_event.cpp
   src/core/events/event_queue.cpp
   src/core/events/event_dispatch.cpp
@@ -149,6 +151,8 @@ if(CGFX_BUILD_TESTS)
       src/core/widget_tree.cpp
       src/layout/flex_layout.cpp
       src/widgets/basic_widgets.cpp
+      src/style/ui_theme.cpp
+      src/style/widget_style_overrides.cpp
       src/render/render_command_list.cpp
   )
   target_include_directories(cgfx_basic_widgets_test PRIVATE
@@ -161,4 +165,23 @@ if(CGFX_BUILD_TESTS)
   target_compile_options(cgfx_basic_widgets_test PRIVATE
       $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall -Wextra -Wpedantic>)
   add_test(NAME cgfx_basic_widgets_test COMMAND cgfx_basic_widgets_test)
+
+  add_executable(cgfx_phase6_style_test tests/phase6_style_test.cpp
+      src/core/widget_tree.cpp
+      src/layout/flex_layout.cpp
+      src/widgets/basic_widgets.cpp
+      src/style/ui_theme.cpp
+      src/style/widget_style_overrides.cpp
+      src/render/render_command_list.cpp
+  )
+  target_include_directories(cgfx_phase6_style_test PRIVATE
+      "${CMAKE_CURRENT_SOURCE_DIR}/src"
+      "${CMAKE_CURRENT_SOURCE_DIR}/include"
+  )
+  set_target_properties(cgfx_phase6_style_test PROPERTIES
+      CXX_STANDARD 17
+      CXX_EXTENSIONS OFF)
+  target_compile_options(cgfx_phase6_style_test PRIVATE
+      $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall -Wextra -Wpedantic>)
+  add_test(NAME cgfx_phase6_style_test COMMAND cgfx_phase6_style_test)
 endif()

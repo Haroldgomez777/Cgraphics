@@ -5,6 +5,8 @@
 #include "core/widget_tree.hpp"
 #include "render/render_command_list.hpp"
 #include "render/render_device.hpp"
+#include "style/ui_theme.hpp"
+#include "style/widget_style_overrides.hpp"
 #include "widgets/basic_widgets.hpp"
 
 #include <memory>
@@ -92,6 +94,15 @@ public:
   BasicWidgets &basic_widgets_mut() noexcept { return basic_widgets_; }
   const BasicWidgets &basic_widgets() const noexcept { return basic_widgets_; }
 
+  const UiTheme &ui_theme() const noexcept { return ui_theme_; }
+  UiTheme &ui_theme_mut() noexcept { return ui_theme_; }
+  const WidgetStyleOverrides &widget_style_overrides() const noexcept {
+    return widget_style_overrides_;
+  }
+  WidgetStyleOverrides &widget_style_overrides_mut() noexcept {
+    return widget_style_overrides_;
+  }
+
   void sync_widget_layout_logical_from_surface() noexcept;
 
   cgfx_widget_id resolved_focus_widget_id() const noexcept {
@@ -117,6 +128,8 @@ private:
   RenderCommandList command_list_{};
   WidgetTree widget_tree_{};
   BasicWidgets basic_widgets_{};
+  UiTheme ui_theme_{UiTheme::make_phase5_builtin()};
+  WidgetStyleOverrides widget_style_overrides_{};
   cgfx_widget_id focus_widget_id_raw_{CGFX_WIDGET_ID_NONE};
   cgfx_input_propagation_policy input_propagation_policy_{CGFX_INPUT_PROPAGATION_TARGET_ONLY};
   bool presenting_{false};

@@ -138,7 +138,8 @@ cgfx_result CgfxWindow::draw_basic_widgets() {
   if (!presenting_) {
     return CGFX_ERROR_PLATFORM;
   }
-  return basic_widgets_mut().paint(widget_tree_mut(), command_list_);
+  return basic_widgets_mut().paint(widget_tree_mut(), command_list_, ui_theme_,
+                                   widget_style_overrides_);
 }
 
 void CgfxWindow::sync_widget_layout_logical_from_surface() noexcept {
