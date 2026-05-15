@@ -245,6 +245,14 @@ const cgfx::UiTheme *unwrap_theme_const(const cgfx_theme *t) noexcept {
   return reinterpret_cast<const cgfx::UiTheme *>(t);
 }
 
+bool window_widget_alive_ok(cgfx::CgfxWindow *w, cgfx_widget_id id) noexcept {
+  if (!w || id == CGFX_WIDGET_ID_NONE) {
+    return false;
+  }
+  size_t ix{};
+  return w->widget_tree().index_of_widget(id, ix) == CGFX_OK;
+}
+
 } // namespace
 
 extern "C" {
@@ -601,6 +609,7 @@ cgfx_result cgfx_widget_destroy(cgfx_window *window, cgfx_widget_id widget_id) {
   cgfx::CgfxWindow *w = cgfx::CgfxWindow::from_opaque(window);
   w->widget_style_overrides_mut().purge_subtree(w->widget_tree(), widget_id);
   w->basic_widgets_mut().purge_subtree(w->widget_tree(), widget_id);
+  w->animations_mut().purge_subtree(w->widget_tree(), widget_id);
   const cgfx_result r = w->widget_tree_mut().destroy_subtree(widget_id);
   if (r == CGFX_OK) {
     w->reconcile_focus_after_structure_change();
@@ -1360,6 +1369,12 @@ cgfx_result cgfx_font_builtin_acquire(const cgfx_context *context,
   return CGFX_OK;
 }
 
+cgfx_result cgfx_font_builtin_acquire_mono_stub(const cgfx_context *context,
+                                                cgfx_font_id *out_font_id) {
+  return cgfx_font_builtin_acquire(context, CGFX_FONT_BUILTIN_MONO_STUB,
+                                   out_font_id);
+}
+
 cgfx_result cgfx_context_text_font_select(cgfx_context *context,
                                           cgfx_font_id font_id) {
   if (!context) {
@@ -1377,6 +1392,16 @@ cgfx_result cgfx_context_text_font_selected(const cgfx_context *context,
       cgfx::CgfxContext::from_opaque(const_cast<cgfx_context *>(context))
           ->selected_text_font();
   return CGFX_OK;
+}
+
+cgfx_result cgfx_context_set_text_font(cgfx_context *context,
+                                       cgfx_font_id font_id) {
+  return cgfx_context_text_font_select(context, font_id);
+}
+
+cgfx_result cgfx_context_get_text_font(const cgfx_context *context,
+                                       cgfx_font_id *out_font_id) {
+  return cgfx_context_text_font_selected(context, out_font_id);
 }
 
 cgfx_result cgfx_text_measure_utf8_line_pixels(const cgfx_context *context,
@@ -1427,6 +1452,148 @@ cgfx_result cgfx_text_measure_utf8_line_pixels(const cgfx_context *context,
   out_metrics->line_height_px = m.line_height_px;
   out_metrics->logical_font_px = fpx;
   return CGFX_OK;
+}
+
+cgfx_result cgfx_text_measure_utf8_line_cstr_pixels(
+    const cgfx_context *context, cgfx_font_id font_id, const char *utf8_cstring,
+    float font_size_sp, float dpi_scale, cgfx_text_line_metrics *out_metrics) {
+  return cgfx_text_measure_utf8_line_pixels(context, font_id, utf8_cstring, 0,
+                                            font_size_sp, dpi_scale, out_metrics);
+}
+
+void cgfx_context_set_animation_speed_scale(cgfx_context *context, float scale) {
+  if (!context) {
+    return;
+  }
+  cgfx::CgfxContext::from_opaque(context)->set_animation_speed_scale(scale);
+}
+
+float cgfx_context_get_animation_speed_scale(const cgfx_context *context) {
+  if (!context) {
+    return 1.f;
+  }
+  return cgfx::CgfxContext::from_opaque(const_cast<cgfx_context *>(context))
+      ->animation_speed_scale_value();
+}
+
+void cgfx_context_animation_set_manual_clock_enabled(cgfx_context *context,
+                                                      int enabled) {
+  if (!context) {
+    return;
+  }
+  cgfx::CgfxContext::from_opaque(context)->animation_clock_mut().set_manual_mode(
+      enabled != 0);
+}
+
+int cgfx_context_animation_get_manual_clock_enabled(const cgfx_context *context) {
+  if (!context) {
+    return 0;
+  }
+  return cgfx::CgfxContext::from_opaque(const_cast<cgfx_context *>(context))
+             ->animation_clock()
+             .manual_mode()
+      ? 1
+      : 0;
+}
+
+void cgfx_context_animation_clock_set_seconds(cgfx_context *context, double seconds) {
+  if (!context) {
+    return;
+  }
+  cgfx::CgfxContext::from_opaque(context)->animation_clock_mut().set_manual_time_seconds(
+      seconds);
+}
+
+double cgfx_context_animation_clock_get_seconds(const cgfx_context *context) {
+  if (!context) {
+    return 0.;
+  }
+  return cgfx::CgfxContext::from_opaque(const_cast<cgfx_context *>(context))
+      ->animation_clock()
+      .now_seconds();
+}
+
+void cgfx_context_animation_manual_advance_seconds(cgfx_context *context,
+                                                     double dt_seconds) {
+  if (!context) {
+    return;
+  }
+  cgfx::CgfxContext::from_opaque(context)->animation_clock_mut().manual_advance_seconds(
+      dt_seconds);
+}
+
+cgfx_result cgfx_animation_start_translate_logical_px(
+    cgfx_window *window, cgfx_widget_id widget_id, float start_x_px, float start_y_px,
+    float end_x_px, float end_y_px, float duration_seconds, cgfx_anim_ease ease,
+    cgfx_animation_id *out_animation_id) {
+  if (!window || !out_animation_id) {
+    return CGFX_ERROR_INVALID_ARGUMENT;
+  }
+  cgfx::CgfxWindow *w = cgfx::CgfxWindow::from_opaque(window);
+  if (!window_widget_alive_ok(w, widget_id)) {
+    return CGFX_ERROR_INVALID_ARGUMENT;
+  }
+  return w->animations_mut().start_translate(widget_id, start_x_px, start_y_px, end_x_px,
+                                             end_y_px, duration_seconds, static_cast<int>(ease),
+                                             out_animation_id);
+}
+
+cgfx_result cgfx_animation_start_opacity(
+    cgfx_window *window, cgfx_widget_id widget_id, float start_alpha, float end_alpha,
+    float duration_seconds, cgfx_anim_ease ease, cgfx_animation_id *out_animation_id) {
+  if (!window || !out_animation_id) {
+    return CGFX_ERROR_INVALID_ARGUMENT;
+  }
+  cgfx::CgfxWindow *w = cgfx::CgfxWindow::from_opaque(window);
+  if (!window_widget_alive_ok(w, widget_id)) {
+    return CGFX_ERROR_INVALID_ARGUMENT;
+  }
+  return w->animations_mut().start_opacity(widget_id, start_alpha, end_alpha,
+                                            duration_seconds, static_cast<int>(ease),
+                                            out_animation_id);
+}
+
+cgfx_result cgfx_animation_start_fill_rgba(cgfx_window *window, cgfx_widget_id widget_id,
+                                          const cgfx_color_rgba *start_color,
+                                          const cgfx_color_rgba *end_color,
+                                          float duration_seconds, cgfx_anim_ease ease,
+                                          cgfx_animation_id *out_animation_id) {
+  if (!window || !out_animation_id || !start_color || !end_color) {
+    return CGFX_ERROR_INVALID_ARGUMENT;
+  }
+  cgfx::CgfxWindow *w = cgfx::CgfxWindow::from_opaque(window);
+  if (!window_widget_alive_ok(w, widget_id)) {
+    return CGFX_ERROR_INVALID_ARGUMENT;
+  }
+  return w->animations_mut().start_fill_rgba(
+      widget_id, start_color->r, start_color->g, start_color->b, start_color->a,
+      end_color->r, end_color->g, end_color->b, end_color->a, duration_seconds,
+      static_cast<int>(ease), out_animation_id);
+}
+
+void cgfx_animation_stop(cgfx_window *window, cgfx_animation_id animation_id) {
+  if (!window) {
+    return;
+  }
+  cgfx::CgfxWindow::from_opaque(window)->animations_mut().stop(animation_id);
+}
+
+void cgfx_animation_stop_widget_property(cgfx_window *window, cgfx_widget_id widget_id,
+                                          cgfx_anim_property property) {
+  if (!window) {
+    return;
+  }
+  cgfx::CgfxWindow::from_opaque(window)->animations_mut().stop_widget_property(
+      widget_id, static_cast<int>(property));
+}
+
+int cgfx_animation_is_active(cgfx_window *window, cgfx_animation_id animation_id) {
+  if (!window) {
+    return 0;
+  }
+  return cgfx::CgfxWindow::from_opaque(window)->animations_mut().is_active(animation_id)
+      ? 1
+      : 0;
 }
 
 } // extern "C"

@@ -112,6 +112,30 @@ int main(void) {
     return 11;
   }
 
+  cgfx_font_id mono = CGFX_FONT_ID_INVALID;
+  if (ck(cgfx_font_builtin_acquire_mono_stub(ctx, &mono) == CGFX_OK &&
+             mono == CGFX_FONT_ID_BUILTIN_DEFAULT,
+         "mono_stub_acquire_alias", 12)) {
+    cgfx_context_destroy(ctx);
+    return 12;
+  }
+
+  if (ck(cgfx_context_set_text_font(ctx, fid) == CGFX_OK &&
+             cgfx_context_get_text_font(ctx, &sel) == CGFX_OK && sel == fid,
+         "set_get_text_font_aliases", 13)) {
+    cgfx_context_destroy(ctx);
+    return 13;
+  }
+
+  cgfx_text_line_metrics m_cstr = {0};
+  if (ck(cgfx_text_measure_utf8_line_cstr_pixels(ctx, fid, "Hi", 13.f, 1.f,
+                                                 &m_cstr) == CGFX_OK &&
+             m_cstr.width_px == m_hi.width_px,
+         "measure_cstr_matches_explicit_len", 14)) {
+    cgfx_context_destroy(ctx);
+    return 14;
+  }
+
   cgfx_context_destroy(ctx);
   return 0;
 }

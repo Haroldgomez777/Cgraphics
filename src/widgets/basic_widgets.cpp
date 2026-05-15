@@ -8,6 +8,8 @@
 #include "style/ui_theme.hpp"
 #include "style/widget_style_overrides.hpp"
 
+#include "animation/anim_paint_modifier.hpp"
+
 #include "text/text_glyph_raster_placeholder.hpp"
 #include "text/text_layout_stub.hpp"
 
@@ -30,6 +32,38 @@ namespace cgfx {
 
 
 namespace {
+
+
+void apply_paint_anim_overlay(const IAnimPaintCompositor *compositor,
+                              cgfx_widget_id id,
+                              int32_t base_x, int32_t base_y,
+                              const RgbaNormalized &resolved, int32_t *out_x,
+                              int32_t *out_y, RgbaNormalized *visual) noexcept {
+  *visual = resolved;
+  *out_x = base_x;
+  *out_y = base_y;
+  if (!compositor) {
+    return;
+  }
+  AnimPaintMod m{};
+  if (!compositor->try_get_mod(id, &m)) {
+    return;
+  }
+  if (m.has_translate) {
+    *out_x += static_cast<int32_t>(std::llround(static_cast<double>(m.translate_x_px)));
+    *out_y += static_cast<int32_t>(std::llround(static_cast<double>(m.translate_y_px)));
+  }
+  if (m.has_fill_rgba) {
+    visual->r = m.fill_r;
+    visual->g = m.fill_g;
+    visual->b = m.fill_b;
+    visual->a = m.fill_a;
+  }
+  if (m.has_opacity_factor) {
+    visual->a *= m.opacity_factor;
+  }
+}
+
 
 
 
@@ -594,7 +628,9 @@ cgfx_result BasicWidgets::paint(const WidgetTree &tree,
 
                                 const WidgetStyleOverrides &overrides,
 
-                                float dpi_scale) {
+                                float dpi_scale,
+
+                                const IAnimPaintCompositor *animation_compositor) {
 
   if (tree.nodes().empty()) {
 
@@ -656,9 +692,15 @@ cgfx_result BasicWidgets::paint(const WidgetTree &tree,
 
           theme, rec, pn);
 
-      (void)cmds.append_fill_rect(r.x, r.y, r.width, r.height, bc.r, bc.g,
+      int32_t px{};
+      int32_t py{};
+      RgbaNormalized vis{};
+      apply_paint_anim_overlay(animation_compositor, id, r.x, r.y, bc, &px, &py,
+                               &vis);
 
-                                  bc.b, bc.a);
+      (void)cmds.append_fill_rect(px, py, r.width, r.height, vis.r, vis.g,
+
+                                  vis.b, vis.a);
 
       break;
 
@@ -703,13 +745,22 @@ cgfx_result BasicWidgets::paint(const WidgetTree &tree,
 
         const RgbaNormalized mc = style_resolution::resolve_label_text_color(theme, rec);
 
-        (void)cmds.append_fill_rect(plan_label.origin_x, plan_label.origin_y,
-                                    plan_label.width_px, plan_label.height_px, mc.r, mc.g,
-                                    mc.b, mc.a);
+        int32_t ox{};
+        int32_t oy{};
+        RgbaNormalized vcol{};
+        apply_paint_anim_overlay(animation_compositor, id, plan_label.origin_x,
+                                 plan_label.origin_y, mc, &ox, &oy, &vcol);
+
+        (void)cmds.append_fill_rect(
+            ox, oy, plan_label.width_px, plan_label.height_px, vcol.r, vcol.g, vcol.b,
+            vcol.a);
         /** Phase 7.1: replace fill with glyph submission when raster backend lands. */
 
+        TextPlaceholderBox plan_draw = plan_label;
+        plan_draw.origin_x = ox;
+        plan_draw.origin_y = oy;
         text_raster_backend::submit_glyph_rasterization_placeholder_todo(
-            plan_label, m_label, cmds);
+            plan_draw, m_label, cmds);
 
       }
 
@@ -731,9 +782,15 @@ cgfx_result BasicWidgets::paint(const WidgetTree &tree,
 
           theme, rec, bt.enabled, hovered, pressed);
 
-      (void)cmds.append_fill_rect(r.x, r.y, r.width, r.height, face.r, face.g,
+      int32_t bx{};
+      int32_t by{};
+      RgbaNormalized fvis{};
+      apply_paint_anim_overlay(animation_compositor, id, r.x, r.y, face, &bx, &by,
+                               &fvis);
 
-                                  face.b, face.a);
+      (void)cmds.append_fill_rect(bx, by, r.width, r.height, fvis.r, fvis.g,
+
+                                  fvis.b, fvis.a);
 
       if (!bt.caption_utf8.empty()) {
 
@@ -771,10 +828,19 @@ cgfx_result BasicWidgets::paint(const WidgetTree &tree,
 
               style_resolution::resolve_button_text_color_placeholder(theme, rec);
 
-          (void)cmds.append_fill_rect(plan_bt.origin_x, plan_bt.origin_y, plan_bt.width_px,
-                                      plan_bt.height_px, cap.r, cap.g, cap.b, cap.a);
+          int32_t ox{};
+          int32_t oy{};
+          RgbaNormalized cvis{};
+          apply_paint_anim_overlay(animation_compositor, id, plan_bt.origin_x,
+                                   plan_bt.origin_y, cap, &ox, &oy, &cvis);
 
-          text_raster_backend::submit_glyph_rasterization_placeholder_todo(plan_bt,
+          (void)cmds.append_fill_rect(ox, oy, plan_bt.width_px,
+                                      plan_bt.height_px, cvis.r, cvis.g, cvis.b, cvis.a);
+
+          TextPlaceholderBox plan_btd = plan_bt;
+          plan_btd.origin_x = ox;
+          plan_btd.origin_y = oy;
+          text_raster_backend::submit_glyph_rasterization_placeholder_todo(plan_btd,
                                                                              m_bt, cmds);
 
         }

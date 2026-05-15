@@ -1,4 +1,4 @@
-# cgfx (Phase 2 → Phase 7 text measurement)
+# cgfx (Phase 2 → Phase 8 animations)
 
 `cgfx` is a cross-platform GUI graphics framework in C/C++.
 
@@ -165,25 +165,24 @@ Phase 5 layers a **facet registry** on the existing tree/flex core (`src/widgets
 | **Geometry** | Phase 4 flex + `cgfx_widget_bounds_logical_px` unchanged. |
 | **Hit testing** | **`cgfx_window_hit_test_logical_px`** remains a **pure geometric** pick (back-compat). Routed pointer events (**`target_widget`** on move/button) use **`visible=false` facet** filtering so hidden subtrees behave like pass-through. |
 | **Rendering** | **`cgfx_window_draw_basic_widgets(win)`** emits fills via **Phase 6 style resolution** plus **Phase 7** deterministic text measurement (`src/text`): label and button captions use resolved **`cgfx_theme_metric_token`** font sizes scaled by **present-pass DPI**, centered placeholder rectangles sized to **`cgfx_text_measure_utf8_line_pixels`**, tinted with **`CGFX_THEME_COLOR_LABEL_TEXT`** / **`CGFX_THEME_COLOR_BUTTON_TEXT`** (not the older placeholder strips). Rasterization hooks live in **`text_glyph_raster_placeholder.hpp`** (no textured glyphs yet — see Phase 7.1 below). |
-| **Text** | UTF-8 on facets; **`cgfx_text_measure_utf8_line_pixels`**, **`cgfx_font_builtin_acquire`**, and context font selection (**`cgfx_context_text_font_select`**) form the seam. Glyph upload / atlas / shaders remain **TODO** (`submit_glyph_rasterization_placeholder_todo`). |
+| **Text** | UTF-8 on facets; **`cgfx_text_measure_utf8_line_pixels`** / **`cgfx_text_measure_utf8_line_cstr_pixels`**, **`cgfx_font_builtin_acquire_mono_stub`**, and **`cgfx_context_set_text_font`** (or **`cgfx_context_text_font_select`**) form the seam. Glyph upload / atlas / shaders remain **TODO** (`submit_glyph_rasterization_placeholder_todo`). |
 | **Clicks** | **Polling model:** on left-button release after a press on the **same** logical `BUTTON` facet, the library appends **`CGFX_EVENT_WIDGET_CLICK`** with **`cgfx_event_widget_click_payload`** (**`widget_id`**, **`button`**, **`x`**, **`y`**). dequeue via **`cgfx_next_event_into`**. Disabled buttons suppress hover tinting and activation. |
 
 ```c
 cgfx_widget_id root = cgfx_window_widget_root(win);
 
-/* Phase 7: optional pre-flight measurement shares the deterministic stub metrics with widgets */
+/* Phase 7: optional pre-flight measurement (same stub metrics as basic widgets). */
 cgfx_font_id face = CGFX_FONT_ID_INVALID;
-cgfx_font_builtin_acquire(ctx, CGFX_FONT_BUILTIN_MONO_STUB, &face);
+cgfx_font_builtin_acquire_mono_stub(ctx, &face);
 
 float dpi = 1.f;
 (void)cgfx_window_get_dpi_scale(win, &dpi);
 
-cgfx_text_line_metrics cap{};
-if (cgfx_text_measure_utf8_line_pixels(
-        ctx, face, "OK", 2 /*bytes*/, /*font_size_sp=*/14.f, dpi,
-        &cap) == CGFX_OK) {
-  /* Use cap.width_px / cap.line_height_px for tooling; widgets already call the same primitive
-   * during cgfx_window_draw_basic_widgets whenever text is visible. */
+cgfx_text_line_metrics cap = {0};
+if (cgfx_text_measure_utf8_line_cstr_pixels(
+        ctx, face, "OK", /*font_size_sp=*/14.f, dpi, &cap) == CGFX_OK) {
+  /* cap.width_px / cap.line_height_px — widgets call the same primitive in
+     cgfx_window_draw_basic_widgets when text is visible. */
 }
 cgfx_basic_widget_panel_create(win, root, &dock);
 cgfx_widget_set_layout_axis(win, dock, CGFX_LAYOUT_AXIS_COLUMN);
@@ -260,31 +259,47 @@ Phase 7 introduces **`src/text/`**: a platform-neutral **stub font**, **determin
 
 | Layer | Responsibility |
 | --- | --- |
-| **`FontRegistry`** | Validates **`cgfx_font_id`** handles. Today only **`CGFX_FONT_ID_BUILTIN_DEFAULT`** (**`cgfx_font_builtin_acquire(..., CGFX_FONT_BUILTIN_MONO_STUB)`**) is admitted. |
+| **`FontRegistry`** | Validates **`cgfx_font_id`** handles. Today only **`CGFX_FONT_ID_BUILTIN_DEFAULT`** (**`cgfx_font_builtin_acquire_mono_stub`** or **`cgfx_font_builtin_acquire(..., CGFX_FONT_BUILTIN_MONO_STUB)`**) is admitted. |
 | **`text_logical_font_px_round` / `text_measure_utf8_line_stub`** | Rounds **`font_size_sp * dpi_scale`** to integer pixels (`logical_font_px`). Horizontal advances classify Latin vs wide codepoint ranges plus a bounded “other-script” blend. Line box uses fixed ascent/descents derived from **`logical_font_px`**. Invalid UTF-8 advances one byte yielding **`U+FFFD`**. Measurement stops at the first **`\\n`** (single logical line API). |
 | **Raster seam** | `text_glyph_raster_placeholder.hpp` documents **`submit_glyph_rasterization_placeholder_todo`** (currently empty). **`BasicWidgets`** still emits a **centered fill-rect strip** tinted with **`label_text_color` / resolved button text color**. |
 | **Presenter DPI** | `CgfxWindow` saves the **`begin_present_pass`** DPI scale so **`cgfx_window_draw_basic_widgets`** matches device measurement without leaking Win32/X11 specifics into **`BasicWidgets`**. |
 
-Measured line layout helper (standalone or ahead of sizing code):
+Measured line layout helper (standalone or ahead of sizing code). Use
+`cgfx_text_measure_utf8_line_cstr_pixels` for NUL-terminated literals; pass an explicit byte length
+when you have a substring or buffer without an interior NUL anchor.
 
 ```c
-cgfx_font_id face{};
-cgfx_font_builtin_acquire(ctx, CGFX_FONT_BUILTIN_MONO_STUB, &face);
+cgfx_font_id face = CGFX_FONT_ID_INVALID;
+cgfx_font_builtin_acquire_mono_stub(ctx, &face);
 
 float dpi = 1.f;
 cgfx_window_get_dpi_scale(win, &dpi);
 
-cgfx_text_line_metrics m{};
-cgfx_text_measure_utf8_line_pixels(ctx, CGFX_FONT_ID_INVALID /*selected font*/,
-    "Hello\nTail", 0 /*strlen*/, 13.f /*sp*/, dpi, &m);
-/* m.width_px covers "Hello"; newline truncates horizontal accumulation */
+cgfx_text_line_metrics m = {0};
+cgfx_text_measure_utf8_line_cstr_pixels(ctx, CGFX_FONT_ID_INVALID /* context default font */,
+                                        "Hello\nTail", 13.f /* sp */, dpi, &m);
+/* m.width_px covers "Hello"; newline truncates horizontal accumulation (single-line API). */
 ```
 
-Select the context’s default measurement font once (optional; defaults to the built-in face):
+Prefer **get/set** names when exploring the headers; they alias the `_text_font_*` entry points:
 
 ```c
-cgfx_context_text_font_select(ctx, face);
+cgfx_context_set_text_font(ctx, face);
+cgfx_font_id round_trip = CGFX_FONT_ID_INVALID;
+cgfx_context_get_text_font(ctx, &round_trip);
 ```
+
+Select the context’s default measurement font once (optional; defaults to `CGFX_FONT_ID_BUILTIN_DEFAULT`):
+
+```c
+cgfx_context_set_text_font(ctx, face);
+```
+
+#### Phase 7: C API entry points
+
+- **`cgfx_font_builtin_acquire`** / **`cgfx_font_builtin_acquire_mono_stub`**; **`CGFX_FONT_BUILTIN_KIND_DEFAULT`** aliases the lone stub kind today.
+- **`cgfx_context_set_text_font`** / **`cgfx_context_get_text_font`** (discoverable aliases for `cgfx_context_text_font_select` / `cgfx_context_text_font_selected`).
+- **`cgfx_text_measure_utf8_line_pixels`** and **`cgfx_text_measure_utf8_line_cstr_pixels`**: pass **`CGFX_FONT_ID_INVALID`** for `font_id` to use the context-selected font. Non-finite **`dpi_scale`** or **`<= 0`** clamps to **`1.f`**. For **`utf8_byte_length == 0`** with a non-NULL pointer, length is **`strlen`**.
 
 #### Phase 7: tests
 
@@ -295,14 +310,42 @@ cgfx_context_text_font_select(ctx, face);
 
 - No real glyph outlines, kerning, ligatures, bidi, or font files — metrics are **documented stub tables** only.
 - Label placeholder marker color (`LabelFacet.marker_explicit` / `CGFX_THEME_COLOR_LABEL_PLACEHOLDER`) is **not** used for the Phase 7 caption strip; paint uses **`CGFX_THEME_COLOR_LABEL_TEXT`** (plus Phase 6 text-color overrides). Use marker fields for future decoration if needed.
-- Multi-line wrapping, ellipses, and rich text are **Phase 8+**.
-- Passing **`CGFX_FONT_ID_INVALID`** to **`cgfx_text_measure_utf8_line_pixels`** resolves the context’s **`cgfx_context_text_font_selected`** handle.
+- Multi-line wrapping, ellipses, and rich text are **Phase 9+** (animations are **Phase 8**).
+- Passing **`CGFX_FONT_ID_INVALID`** to **`cgfx_text_measure_utf8_line_pixels`** resolves the context’s **`cgfx_context_text_font_selected`** (**`cgfx_context_get_text_font`**) handle.
 
 #### Phase 7.1 (next)
 
 - Load/select **platform or bundled `.ttf` / `.otf`** resources through **`FontRegistry`**, preserving the same measurement API surface where possible.
 - Implement **`submit_glyph_rasterization_placeholder_todo`** with atlas + shader path on **`RenderCommandList`** (new command bucket) while keeping **`BasicWidgets` measurement-only** coupling.
 - Optional CoreText/DirectWrite shapers behind **`text_measure_utf8_line_stub`** indirection.
+
+### Phase 8: property animations (timeline + clock + easing)
+
+Phase 8 introduces a **small, platform-neutral animation core** wired into **`cgfx_window_begin_present_pass`** and **`cgfx_window_draw_basic_widgets`**:
+
+| Layer | Responsibility |
+| --- | --- |
+| **`AnimationClock`** (`src/animation/animation_clock.*`) | **Wall-clock** head (`std::chrono::steady_clock`) or **manual** deterministic time (`cgfx_context_animation_*` helpers). |
+| **`animation_easing`** (`src/animation/easing.*`) | Normalized **`CGFX_ANIM_EASE_*`** curves for clip sampling. |
+| **`WidgetAnimationSystem`** (`src/animation/widget_animation_system.*`) | Per-window clips: translate (logical px), opacity multiplier, lerped fill RGBA. **Newest clip id wins** when several clips collide on the same widget channel. |
+| **`IAnimPaintCompositor` / `AnimPaintMod`** | Adapter passed into **`BasicWidgets::paint`** so widgets remain decoupled from backends. |
+
+**C API (additive):** **`cgfx_context_[get|set]_animation_speed_scale`**, manual clock getters/setters, **`cgfx_animation_start_*`** / **`cgfx_animation_stop`**, **`cgfx_animation_stop_widget_property`**, **`cgfx_animation_is_active`** (see `cgfx_api.h`). Destroying widgets purges overlapping animation clips alongside facets/styles.
+
+Each **`cgfx_window_begin_present_pass`** runs flex layout, samples the context clock vs the window’s prior sample (first step uses **`dt = 0`**), clamps **`dt`** to **`0.25` s**, scales by **`animation_speed_scale`**, then advances that window’s clip timeline before recording GL commands.
+
+**Tests:** **`cgfx_animation_phase8_test`** (easing + deterministic `advance` + paint rect integration). Verification: **`cmake --preset windows-mingw-debug`**, **`cmake --build --preset build-windows-mingw-debug`**, **`ctest --preset test-windows-mingw-debug`**.
+
+#### Phase 8: caveats
+
+- **Translate** offsets affect **paint only** — hit testing still uses intrinsic flex rects.
+- Stopping clips **drops** modulation (no implicit “sticky” final style).
+- Animated opacity / fill apply to **basic-widget** fill-rect emission; **`cgfx_widget_style_query_resolved_*`** remain static.
+
+#### Phase 8.1 (next)
+
+- Hit-test parity for translated visuals (or layout-level offset channels).
+- Completion callbacks / loops / overlapping policy beyond newest-wins.
 
 ## Prerequisites
 
@@ -397,7 +440,7 @@ Notes:
 
 ## Baseline Verification
 
-The library baseline is considered stable when **`cmake --preset windows-mingw-debug`**, **`cmake --build --preset build-windows-mingw-debug`**, and **`ctest --preset test-windows-mingw-debug`** all succeed on Windows (or the equivalent Linux preset). Include **Phase 7** coverage — **`cgfx_text_measurement_test`** and **`cgfx_widget_text_integration_test`** — alongside earlier suites.
+The library baseline is considered stable when **`cmake --preset windows-mingw-debug`**, **`cmake --build --preset build-windows-mingw-debug`**, and **`ctest --preset test-windows-mingw-debug`** all succeed on Windows (or the equivalent Linux preset). Include **Phase 7–8** coverage — **`cgfx_text_measurement_test`**, **`cgfx_widget_text_integration_test`**, **`cgfx_animation_phase8_test`** — alongside earlier suites.
 
 ## Project Layout (Current Phase)
 
@@ -406,6 +449,7 @@ The library baseline is considered stable when **`cmake --preset windows-mingw-d
 - `src/core/` - context + window internals + **`widget_tree`**
 - `src/layout/` - Phase 4 flex sizing / measurement engine
 - `src/style/` - Phase 6 theme tokens + override map + resolution helpers
+- `src/animation/` - Phase 8 animation clock, easing, timelines, paint compositor adapters
 - `src/text/` - Phase 7 font registry + deterministic measurement + raster placeholder seam
 - `src/platform/` - Win32/X11 platform backends
 - `src/render/` - minimal OpenGL surface/present helpers

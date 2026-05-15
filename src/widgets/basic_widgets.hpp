@@ -14,6 +14,9 @@ namespace cgfx {
 struct UiTheme;
 class WidgetStyleOverrides;
 
+/** Phase 8: optional compositor for widget-local timed modifiers. */
+class IAnimPaintCompositor;
+
 class CgfxWindow;
 
 /** Phase 6 style debug: hypothetical button face resolution (mirrors paint combiner). */
@@ -103,7 +106,8 @@ public:
 
   cgfx_result paint(const WidgetTree &tree, RenderCommandList &cmds,
                     const UiTheme &theme, const WidgetStyleOverrides &overrides,
-                    float dpi_scale);
+                    float dpi_scale,
+                    const IAnimPaintCompositor *animation_compositor = nullptr);
 
   /** Property helpers (reject unknown / wrong kind). */
   cgfx_result set_visible(cgfx_widget_id id, bool visible) noexcept;

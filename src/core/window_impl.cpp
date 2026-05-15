@@ -64,6 +64,25 @@ cgfx_result CgfxWindow::begin_present_pass(uint32_t *out_width_px,
 
   run_flex_layout(widget_tree_, frame.width_px, frame.height_px);
 
+  if (ctx_) {
+    ctx_->animation_clock_mut().bootstrap_wall_if_needed();
+    const double clock_now = ctx_->animation_clock().now_seconds();
+    double dt = 0.;
+    if (animation_last_clock_s_ >= 0.) {
+      dt = clock_now - animation_last_clock_s_;
+      if (dt < 0.) {
+        dt = 0.;
+      }
+      if (dt > 0.25) {
+        dt = 0.25;
+      }
+    }
+    animation_last_clock_s_ = clock_now;
+    const double scaled =
+        dt * static_cast<double>(ctx_->animation_speed_scale_value());
+    animations_mut().advance(scaled);
+  }
+
   rc = render_device_->begin_frame(frame);
   if (rc != CGFX_OK) {
     surface_->end_present();
@@ -145,7 +164,7 @@ cgfx_result CgfxWindow::draw_basic_widgets() {
   }
   return basic_widgets_mut().paint(widget_tree_mut(), command_list_, ui_theme_,
                                    widget_style_overrides_,
-                                   presenting_text_dpi_scale_);
+                                   presenting_text_dpi_scale_, &animations_);
 }
 
 void CgfxWindow::sync_widget_layout_logical_from_surface() noexcept {

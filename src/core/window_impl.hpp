@@ -9,6 +9,8 @@
 #include "style/widget_style_overrides.hpp"
 #include "widgets/basic_widgets.hpp"
 
+#include "animation/widget_animation_system.hpp"
+
 #include <memory>
 
 namespace cgfx {
@@ -103,6 +105,11 @@ public:
     return widget_style_overrides_;
   }
 
+  WidgetAnimationSystem &animations_mut() noexcept { return animations_; }
+  const WidgetAnimationSystem &animations() const noexcept {
+    return animations_;
+  }
+
   void sync_widget_layout_logical_from_surface() noexcept;
 
   cgfx_widget_id resolved_focus_widget_id() const noexcept {
@@ -135,6 +142,9 @@ private:
   bool presenting_{false};
   /** Valid while `presenting_`; defaults to `1.f`. Used when drawing basic-widget text stubs. */
   float presenting_text_dpi_scale_{1.f};
+  WidgetAnimationSystem animations_{};
+  /** Per-window last sampled `AnimationClock::now_seconds()` for `dt`; negative = unset. */
+  double animation_last_clock_s_{-1.0};
 };
 
 /** Used by centralized event_dispatch; keeps Win32/X11 backends free of widget coupling. */

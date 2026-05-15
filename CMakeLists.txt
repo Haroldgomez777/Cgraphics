@@ -20,6 +20,9 @@ set(CGFX_PUBLIC_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/include")
   src/widgets/basic_widgets.cpp
   src/style/ui_theme.cpp
   src/style/widget_style_overrides.cpp
+  src/animation/animation_clock.cpp
+  src/animation/easing.cpp
+  src/animation/widget_animation_system.cpp
   src/core/events/internal_event.cpp
   src/core/events/event_queue.cpp
   src/core/events/event_dispatch.cpp
@@ -212,4 +215,26 @@ if(CGFX_BUILD_TESTS)
   target_compile_options(cgfx_widget_text_integration_test PRIVATE
       $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall -Wextra -Wpedantic>)
   add_test(NAME cgfx_widget_text_integration_test COMMAND cgfx_widget_text_integration_test)
+
+  add_executable(cgfx_animation_phase8_test tests/animation_phase8_test.cpp
+      src/animation/easing.cpp
+      src/animation/widget_animation_system.cpp
+      src/core/widget_tree.cpp
+      src/layout/flex_layout.cpp
+      src/widgets/basic_widgets.cpp
+      src/style/ui_theme.cpp
+      src/style/widget_style_overrides.cpp
+      src/render/render_command_list.cpp
+      src/text/text_layout_stub.cpp
+  )
+  target_include_directories(cgfx_animation_phase8_test PRIVATE
+      "${CMAKE_CURRENT_SOURCE_DIR}/src"
+      "${CMAKE_CURRENT_SOURCE_DIR}/include"
+  )
+  set_target_properties(cgfx_animation_phase8_test PROPERTIES
+      CXX_STANDARD 17
+      CXX_EXTENSIONS OFF)
+  target_compile_options(cgfx_animation_phase8_test PRIVATE
+      $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall -Wextra -Wpedantic>)
+  add_test(NAME cgfx_animation_phase8_test COMMAND cgfx_animation_phase8_test)
 endif()

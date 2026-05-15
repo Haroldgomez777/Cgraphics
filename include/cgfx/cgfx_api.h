@@ -465,6 +465,8 @@ CGFX_API cgfx_result cgfx_basic_widget_button_get_enabled(cgfx_window *window,
                                                           cgfx_widget_id button_id,
                                                           int *out_enabled);
 
+/** Stored caption / label UTF-8 (label/button facets). @p utf8_byte_length `0` with non-NULL
+ *  @p utf8_bytes uses `strlen`. */
 CGFX_API cgfx_result cgfx_basic_widget_utf8_text_set(cgfx_window *window,
                                                     cgfx_widget_id widget_id,
                                                     const char *utf8_bytes,
@@ -656,9 +658,14 @@ typedef uint64_t cgfx_font_id;
 #endif
 
 typedef enum cgfx_font_builtin_kind {
-  /** Deterministic monospace-style metrics backed by cgfx-internal tables (Phase 7). */
+  /** Deterministic monospace-style metrics backed by cgfx-internal tables (Phase 7).
+   *  Additional kinds may be appended in future releases; unsupported values make
+   *  `cgfx_font_builtin_acquire` return `CGFX_ERROR_UNSUPPORTED`. */
   CGFX_FONT_BUILTIN_MONO_STUB = 0,
 } cgfx_font_builtin_kind;
+
+/** Convenience: same enumerator as `CGFX_FONT_BUILTIN_MONO_STUB` (only built-in today). */
+#define CGFX_FONT_BUILTIN_KIND_DEFAULT CGFX_FONT_BUILTIN_MONO_STUB
 
 typedef struct cgfx_text_line_metrics {
   uint32_t width_px;
@@ -675,15 +682,113 @@ CGFX_API cgfx_result cgfx_font_builtin_acquire(const cgfx_context *context,
                                                cgfx_font_builtin_kind kind,
                                                cgfx_font_id *out_font_id);
 
+/** Same as `cgfx_font_builtin_acquire(..., CGFX_FONT_BUILTIN_MONO_STUB, out_font_id)`. */
+CGFX_API cgfx_result cgfx_font_builtin_acquire_mono_stub(const cgfx_context *context,
+                                                         cgfx_font_id *out_font_id);
+
+/** Selects the font used when `cgfx_text_measure_utf8_line_pixels` is passed
+ *  `CGFX_FONT_ID_INVALID` for @p font_id (context default). */
 CGFX_API cgfx_result cgfx_context_text_font_select(cgfx_context *context,
                                                    cgfx_font_id font_id);
+/** Query the context default measurement font (initially `CGFX_FONT_ID_BUILTIN_DEFAULT`). */
 CGFX_API cgfx_result cgfx_context_text_font_selected(const cgfx_context *context,
                                                      cgfx_font_id *out_font_id);
 
+/** Discoverable aliases: same as `cgfx_context_text_font_select` / `cgfx_context_text_font_selected`. */
+CGFX_API cgfx_result cgfx_context_set_text_font(cgfx_context *context,
+                                                cgfx_font_id font_id);
+CGFX_API cgfx_result cgfx_context_get_text_font(const cgfx_context *context,
+                                                cgfx_font_id *out_font_id);
+
+/** Measures one logical line of UTF-8 text in pixels (stub font metrics; see Phase 7 README).
+ *
+ *  @param utf8_bytes May be NULL only when @p utf8_byte_length is 0 (treated as empty input).
+ *  @param utf8_byte_length Byte count; if 0 and @p utf8_bytes is non-NULL, length is
+ *         `strlen(utf8_bytes)` (NUL-terminated scan). Interior NUL bytes are included in that case.
+ *  @param font_id Pass `CGFX_FONT_ID_INVALID` to use the context’s selected font
+ *         (`cgfx_context_set_text_font` / `cgfx_context_text_font_select`).
+ *  @param dpi_scale Non-finite or `<= 0` is treated as `1.f` (same as widget paint path). */
 CGFX_API cgfx_result cgfx_text_measure_utf8_line_pixels(
     const cgfx_context *context, cgfx_font_id font_id, const char *utf8_bytes,
     size_t utf8_byte_length, float font_size_sp, float dpi_scale,
     cgfx_text_line_metrics *out_metrics);
+
+/** Like `cgfx_text_measure_utf8_line_pixels` for a NUL-terminated @p utf8_cstring: equivalent to
+ *  passing `utf8_byte_length == 0` with the same pointer (triggers `strlen`). NULL is an empty string. */
+CGFX_API cgfx_result cgfx_text_measure_utf8_line_cstr_pixels(
+    const cgfx_context *context, cgfx_font_id font_id, const char *utf8_cstring,
+    float font_size_sp, float dpi_scale, cgfx_text_line_metrics *out_metrics);
+
+/* ---- Phase 8: widget property animations (timeline + easing; platform-neutral) ---- */
+
+typedef uint64_t cgfx_animation_id;
+
+#ifndef CGFX_ANIMATION_ID_NONE
+#  define CGFX_ANIMATION_ID_NONE UINT64_C(0)
+#endif
+
+/** Target semantic for `cgfx_animation_start_*` helpers. */
+typedef enum cgfx_anim_property {
+  CGFX_ANIM_PROPERTY_TRANSLATE_LOGICAL_PX = 0,
+  CGFX_ANIM_PROPERTY_OPACITY = 1,
+  /** Replaces resolved panel / button face RGBA for the widget for the clip lifetime. */
+  CGFX_ANIM_PROPERTY_FILL_RGBA = 2,
+} cgfx_anim_property;
+
+typedef enum cgfx_anim_ease {
+  CGFX_ANIM_EASE_LINEAR = 0,
+  CGFX_ANIM_EASE_IN_QUAD = 1,
+  CGFX_ANIM_EASE_OUT_QUAD = 2,
+  CGFX_ANIM_EASE_IN_OUT_QUAD = 3,
+  CGFX_ANIM_EASE_IN_OUT_CUBIC = 4,
+} cgfx_anim_ease;
+
+/** Multiplies every per-frame `dt` applied to active clips (default `1.f`). Non-finite/`<=0`
+ *  treated as `1.f`. */
+CGFX_API void cgfx_context_set_animation_speed_scale(cgfx_context *context,
+                                                     float scale);
+CGFX_API float cgfx_context_get_animation_speed_scale(const cgfx_context *context);
+
+/** When enabled, `cgfx_context_animation_clock_seconds` tracks manual time only (`0` =
+ *  disabled = wall-clock relative time on the internal animation clock). */
+CGFX_API void cgfx_context_animation_set_manual_clock_enabled(cgfx_context *context,
+                                                              int enabled);
+CGFX_API int cgfx_context_animation_get_manual_clock_enabled(
+    const cgfx_context *context);
+
+/** Absolute manual clock setter (seconds). Ignored unless manual clock is enabled. */
+CGFX_API void cgfx_context_animation_clock_set_seconds(cgfx_context *context,
+                                                         double seconds);
+CGFX_API double cgfx_context_animation_clock_get_seconds(const cgfx_context *context);
+
+/** Advances manual playback time deterministically (`dt` seconds). No-op unless manual clock
+ *  is enabled. Wall-clock mode ignores this (use alongside `*_set_manual_clock_enabled`). */
+CGFX_API void cgfx_context_animation_manual_advance_seconds(cgfx_context *context,
+                                                              double dt_seconds);
+
+CGFX_API cgfx_result cgfx_animation_start_translate_logical_px(
+    cgfx_window *window, cgfx_widget_id widget_id, float start_x_px, float start_y_px,
+    float end_x_px, float end_y_px, float duration_seconds, cgfx_anim_ease ease,
+    cgfx_animation_id *out_animation_id);
+
+CGFX_API cgfx_result cgfx_animation_start_opacity(
+    cgfx_window *window, cgfx_widget_id widget_id, float start_alpha, float end_alpha,
+    float duration_seconds, cgfx_anim_ease ease, cgfx_animation_id *out_animation_id);
+
+CGFX_API cgfx_result cgfx_animation_start_fill_rgba(
+    cgfx_window *window, cgfx_widget_id widget_id,
+    const cgfx_color_rgba *start_color, const cgfx_color_rgba *end_color,
+    float duration_seconds, cgfx_anim_ease ease, cgfx_animation_id *out_animation_id);
+
+CGFX_API void cgfx_animation_stop(cgfx_window *window, cgfx_animation_id animation_id);
+CGFX_API void cgfx_animation_stop_widget_property(cgfx_window *window,
+                                                    cgfx_widget_id widget_id,
+                                                    cgfx_anim_property property);
+
+/** Returns non-zero while the id refers to an active clip in the window animation list
+ * (finished clips holding their end pose still count until `cgfx_animation_stop`). */
+CGFX_API int cgfx_animation_is_active(cgfx_window *window,
+                                      cgfx_animation_id animation_id);
 
 #ifdef __cplusplus
 }

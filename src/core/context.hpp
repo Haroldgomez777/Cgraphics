@@ -2,10 +2,13 @@
 
 #include <cgfx/cgfx_api.h>
 
+#include "animation/animation_clock.hpp"
 #include "core/events/event_queue.hpp"
 #include "text/font_registry.hpp"
 
 #include <memory>
+
+#include <cmath>
 
 namespace cgfx {
 
@@ -74,6 +77,20 @@ public:
   }
   cgfx_result set_selected_text_font(cgfx_font_id id) noexcept;
 
+  AnimationClock &animation_clock_mut() noexcept { return animation_clock_; }
+  const AnimationClock &animation_clock() const noexcept {
+    return animation_clock_;
+  }
+
+  float animation_speed_scale_value() const noexcept {
+    if (!std::isfinite(animation_speed_scale_) ||
+        animation_speed_scale_ <= 0.f) {
+      return 1.f;
+    }
+    return animation_speed_scale_;
+  }
+  void set_animation_speed_scale(float s) noexcept { animation_speed_scale_ = s; }
+
 private:
   std::unique_ptr<PlatformBackend> backend_{};
   EventQueue event_queue_{};
@@ -82,6 +99,8 @@ private:
   bool input_routing_trace_enabled_{false};
   FontRegistry font_registry_{};
   cgfx_font_id selected_text_font_{CGFX_FONT_ID_BUILTIN_DEFAULT};
+  AnimationClock animation_clock_{};
+  float animation_speed_scale_{1.f};
 };
 
 } // namespace cgfx
