@@ -47,10 +47,18 @@ public:
     return CGFX_OK;
   }
 
-  cgfx_result clear_normalized_rgba(float r, float g, float b,
-                                    float a) override {
-    glClearColor(clamp_unit(r), clamp_unit(g), clamp_unit(b), clamp_unit(a));
-    glClear(GL_COLOR_BUFFER_BIT);
+  cgfx_result submit(const RenderCommandList &commands) override {
+    for (const RenderCommand &cmd : commands.commands()) {
+      switch (cmd.type) {
+      case RenderCommandType::ClearColor:
+        glClearColor(clamp_unit(cmd.clear.red), clamp_unit(cmd.clear.green),
+                     clamp_unit(cmd.clear.blue), clamp_unit(cmd.clear.alpha));
+        glClear(GL_COLOR_BUFFER_BIT);
+        break;
+      default:
+        return CGFX_ERROR_UNSUPPORTED;
+      }
+    }
     return CGFX_OK;
   }
 

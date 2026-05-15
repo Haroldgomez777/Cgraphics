@@ -2,6 +2,7 @@
 
 #include <cgfx/cgfx_api.h>
 
+#include "render/render_command_list.hpp"
 #include "render/render_device.hpp"
 
 #include <memory>
@@ -76,6 +77,7 @@ private:
   CgfxContext *ctx_{};
   std::unique_ptr<PlatformSurface> surface_{};
   std::unique_ptr<RenderDevice> render_device_{};
+  RenderCommandList command_list_{};
   bool presenting_{false};
 };
 

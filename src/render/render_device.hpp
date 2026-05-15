@@ -2,6 +2,8 @@
 
 #include <cgfx/cgfx_api.h>
 
+#include "render/render_command_list.hpp"
+
 #include <cstdint>
 #include <memory>
 
@@ -21,8 +23,7 @@ public:
   RenderDevice &operator=(const RenderDevice &) = delete;
 
   virtual cgfx_result begin_frame(const RenderFrameInfo &frame) = 0;
-  virtual cgfx_result clear_normalized_rgba(float r, float g, float b,
-                                            float a) = 0;
+  virtual cgfx_result submit(const RenderCommandList &commands) = 0;
   virtual void end_frame() = 0;
 
 protected:

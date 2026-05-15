@@ -60,6 +60,7 @@ cgfx_result CgfxWindow::begin_present_pass(uint32_t *out_width_px,
     return rc;
   }
 
+  command_list_.reset();
   presenting_ = true;
 
   if (out_width_px) {
@@ -77,10 +78,10 @@ cgfx_result CgfxWindow::begin_present_pass(uint32_t *out_width_px,
 
 cgfx_result CgfxWindow::clear_present_surface(float red, float green, float blue,
                                               float alpha) {
-  if (!presenting_ || !render_device_) {
+  if (!presenting_) {
     return CGFX_ERROR_PLATFORM;
   }
-  return render_device_->clear_normalized_rgba(red, green, blue, alpha);
+  return command_list_.append_clear_color(red, green, blue, alpha);
 }
 
 void CgfxWindow::end_present_pass() {
@@ -88,11 +89,13 @@ void CgfxWindow::end_present_pass() {
     return;
   }
   if (render_device_) {
+    (void)render_device_->submit(command_list_);
     render_device_->end_frame();
   }
   if (surface_) {
     surface_->end_present();
   }
+  command_list_.reset();
   presenting_ = false;
 }
 
