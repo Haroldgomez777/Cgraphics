@@ -749,16 +749,22 @@ CGFX_API void cgfx_context_set_animation_speed_scale(cgfx_context *context,
                                                      float scale);
 CGFX_API float cgfx_context_get_animation_speed_scale(const cgfx_context *context);
 
-/** When enabled, `cgfx_context_animation_clock_seconds` tracks manual time only (`0` =
+/** When enabled, `cgfx_context_animation_clock_get_seconds` follows the manual head (`0` =
  *  disabled = wall-clock relative time on the internal animation clock). */
 CGFX_API void cgfx_context_animation_set_manual_clock_enabled(cgfx_context *context,
                                                               int enabled);
 CGFX_API int cgfx_context_animation_get_manual_clock_enabled(
     const cgfx_context *context);
 
-/** Absolute manual clock setter (seconds). Ignored unless manual clock is enabled. */
+/** Sets the internal manual clock head (seconds). While **wall-clock** mode is active,
+ *  `cgfx_context_animation_clock_get_seconds` still follows wall time; this value is used
+ *  once manual mode is enabled. Enabling manual mode re-initializes the head from the
+ *  current wall-relative time (so values set only while wall mode was active are not
+ *  preserved across that transition). Non-finite values are ignored. */
 CGFX_API void cgfx_context_animation_clock_set_seconds(cgfx_context *context,
-                                                         double seconds);
+                                                     double seconds);
+/** Current animation clock head: wall-derived in default mode, or the manual head when
+ *  manual clock is enabled. */
 CGFX_API double cgfx_context_animation_clock_get_seconds(const cgfx_context *context);
 
 /** Advances manual playback time deterministically (`dt` seconds). No-op unless manual clock
@@ -781,9 +787,10 @@ CGFX_API cgfx_result cgfx_animation_start_fill_rgba(
     float duration_seconds, cgfx_anim_ease ease, cgfx_animation_id *out_animation_id);
 
 CGFX_API void cgfx_animation_stop(cgfx_window *window, cgfx_animation_id animation_id);
+/** Removes every clip for @p widget_id on @p property. Unknown property values no-op. */
 CGFX_API void cgfx_animation_stop_widget_property(cgfx_window *window,
-                                                    cgfx_widget_id widget_id,
-                                                    cgfx_anim_property property);
+                                                  cgfx_widget_id widget_id,
+                                                  cgfx_anim_property property);
 
 /** Returns non-zero while the id refers to an active clip in the window animation list
  * (finished clips holding their end pose still count until `cgfx_animation_stop`). */

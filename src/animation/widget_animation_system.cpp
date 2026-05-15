@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <unordered_set>
 
 namespace cgfx {
 namespace {
@@ -46,10 +47,10 @@ void WidgetAnimationSystem::purge_subtree(const WidgetTree &tree,
   }
   std::vector<uint64_t> ids;
   collect_alive_subtree_widget_ids(tree, ri, ids);
+  std::unordered_set<uint64_t> id_set(ids.begin(), ids.end());
   clips_.erase(std::remove_if(clips_.begin(), clips_.end(),
-                              [&ids](const Clip &c) {
-                                return std::find(ids.begin(), ids.end(), c.widget) !=
-                                       ids.end();
+                              [&id_set](const Clip &c) {
+                                return id_set.find(c.widget) != id_set.end();
                               }),
                clips_.end());
 }
@@ -58,6 +59,10 @@ cgfx_result WidgetAnimationSystem::start_translate(
     cgfx_widget_id widget, float sx, float sy, float ex, float ey,
     float duration_seconds, int ease, cgfx_animation_id *out_id) noexcept {
   if (!out_id || !std::isfinite(duration_seconds) || duration_seconds <= 0.f) {
+    return CGFX_ERROR_INVALID_ARGUMENT;
+  }
+  if (!std::isfinite(sx) || !std::isfinite(sy) || !std::isfinite(ex) ||
+      !std::isfinite(ey)) {
     return CGFX_ERROR_INVALID_ARGUMENT;
   }
   Clip c{};
@@ -109,6 +114,11 @@ cgfx_result WidgetAnimationSystem::start_fill_rgba(
     float eb, float ea, float duration_seconds, int ease,
     cgfx_animation_id *out_id) noexcept {
   if (!out_id || !std::isfinite(duration_seconds) || duration_seconds <= 0.f) {
+    return CGFX_ERROR_INVALID_ARGUMENT;
+  }
+  if (!std::isfinite(sr) || !std::isfinite(sg) || !std::isfinite(sb) ||
+      !std::isfinite(sa) || !std::isfinite(er) || !std::isfinite(eg) ||
+      !std::isfinite(eb) || !std::isfinite(ea)) {
     return CGFX_ERROR_INVALID_ARGUMENT;
   }
   Clip c{};

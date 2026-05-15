@@ -15,6 +15,7 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <limits>
 
 namespace {
 
@@ -52,6 +53,9 @@ int main() {
   cgfx::WidgetAnimationSystem sys{};
   cgfx_widget_id w1 = 42;
   cgfx_animation_id id{};
+  const float nanv = std::numeric_limits<float>::quiet_NaN();
+  assert(sys.start_translate(w1, nanv, 0.f, 0.f, 0.f, 1.f, CGFX_ANIM_EASE_LINEAR, &id) ==
+         CGFX_ERROR_INVALID_ARGUMENT);
   assert(sys.start_translate(w1, 0.f, 0.f, 100.f, -50.f, 10.f, CGFX_ANIM_EASE_LINEAR,
                              &id) == CGFX_OK);
   sys.advance(2.5); /** 25% */
@@ -64,6 +68,21 @@ int main() {
   assert(sys.try_get_mod(w1, &m));
   assert(near_f(m.translate_x_px, 100.f));
   assert(near_f(m.translate_y_px, -50.f));
+
+  /** Overlapping translates: highest `cgfx_animation_id` wins the sample. */
+  sys.stop(id);
+  cgfx_animation_id t1{}, t2{};
+  assert(sys.start_translate(w1, 0.f, 0.f, 10.f, 0.f, 10.f, CGFX_ANIM_EASE_LINEAR, &t1) ==
+         CGFX_OK);
+  assert(sys.start_translate(w1, 0.f, 0.f, 100.f, 0.f, 10.f, CGFX_ANIM_EASE_LINEAR, &t2) ==
+         CGFX_OK);
+  assert(t2 > t1);
+  sys.advance(5.f); /** 50% on both; second clip's lerp should dominate */
+  assert(sys.try_get_mod(w1, &m));
+  assert(m.has_translate);
+  assert(near_f(m.translate_x_px, 50.f));
+  sys.stop(t1);
+  sys.stop(t2);
 
   /** ---- Paint path: fill + opacity multiply ---- */
   cgfx::WidgetTree tree{};

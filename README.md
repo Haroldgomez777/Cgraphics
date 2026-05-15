@@ -341,11 +341,13 @@ Each **`cgfx_window_begin_present_pass`** runs flex layout, samples the context 
 - **Translate** offsets affect **paint only** — hit testing still uses intrinsic flex rects.
 - Stopping clips **drops** modulation (no implicit “sticky” final style).
 - Animated opacity / fill apply to **basic-widget** fill-rect emission; **`cgfx_widget_style_query_resolved_*`** remain static.
+- **Finished** clips hold the end pose and stay in the clip list (and count as “active” for **`cgfx_animation_is_active`**) until **`cgfx_animation_stop`** / **`cgfx_animation_stop_widget_property`** or widget subtree teardown.
+- **Manual clock:** `cgfx_context_animation_clock_set_seconds` updates the stored manual head, but wall mode’s **`cgfx_context_animation_clock_get_seconds`** still follows wall time; toggling into manual mode snapshots from wall (see `cgfx_api.h`).
 
 #### Phase 8.1 (next)
 
 - Hit-test parity for translated visuals (or layout-level offset channels).
-- Completion callbacks / loops / overlapping policy beyond newest-wins.
+- Completion callbacks / loops; optional auto-prune of finished clips; cheaper per-widget clip lookup than sort-on-every-paint.
 
 ## Prerequisites
 

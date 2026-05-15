@@ -11,7 +11,9 @@ namespace cgfx {
 class WidgetTree;
 
 /** Per-window timeline of property clips + ease sampling. Platform- and widget-kind-agnostic:
- * modifiers are applied during basic-widget painting when a compositor pointer is supplied. */
+ * modifiers are applied during basic-widget painting when a compositor pointer is supplied.
+ * Overlapping clips on the same widget and channel (translate / opacity / fill) compose as
+ * **highest `cgfx_animation_id` wins** (most recently started among active clips). */
 class WidgetAnimationSystem final : public IAnimPaintCompositor {
 public:
   WidgetAnimationSystem() = default;
