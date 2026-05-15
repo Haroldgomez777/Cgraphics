@@ -702,9 +702,21 @@ cgfx_result cgfx_window_hit_test_logical_px(cgfx_window *window, int32_t x,
   }
   cgfx::CgfxWindow *w = cgfx::CgfxWindow::from_opaque(window);
 
-  /** Match input routing snapshot */
+  /** Match **layout-only** rects; routed input uses `hit_test_logical_filtered_paint_visual` (translate + filters). */
   w->sync_widget_layout_logical_from_surface();
   *out_target = w->widget_tree().hit_test_logical(x, y);
+  return CGFX_OK;
+}
+
+cgfx_result cgfx_window_hit_test_logical_paint_visual_px(
+    cgfx_window *window, int32_t x, int32_t y, cgfx_widget_id *out_target) {
+  if (!window || !out_target) {
+    return CGFX_ERROR_INVALID_ARGUMENT;
+  }
+  cgfx::CgfxWindow *w = cgfx::CgfxWindow::from_opaque(window);
+  w->sync_widget_layout_logical_from_surface();
+  *out_target =
+      w->widget_tree().hit_test_logical_paint_visual(x, y, &w->animations());
   return CGFX_OK;
 }
 

@@ -399,6 +399,11 @@ CGFX_API cgfx_result cgfx_window_hit_test_logical_px(cgfx_window *window,
                                                       int32_t x, int32_t y,
                                                       cgfx_widget_id *out_target);
 
+/** Deepest geometric hit applying **paint translate clips** alongside layout bounds (opaque to
+ *  visibility filtering). Unfiltered — use routed pointer picks for facet visibility semantics. */
+CGFX_API cgfx_result cgfx_window_hit_test_logical_paint_visual_px(
+    cgfx_window *window, int32_t x, int32_t y, cgfx_widget_id *out_target);
+
 /** Current keyboard focus widget (validated each access; stale ids fall back to root). */
 CGFX_API cgfx_widget_id cgfx_window_focus_widget(const cgfx_window *window);
 

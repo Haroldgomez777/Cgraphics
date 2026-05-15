@@ -18,12 +18,8 @@ struct TextLineMetrics {
   uint32_t line_height_px{0};
 };
 
-/** Deterministic Phase-7 stub: single-line UTF-8 measure (stops at first `\\n` / `\\r\\n`).
- *  Invalid sequences advance one byte mapped to `U+FFFD` consistent with decoding rules in README.
- *
- *  `Phase 7.1`: replace advance tables with shaping / HarfBuzz + real outlines; see
- *  `SubmitGlyphRasterizationPlaceholder` (text_glyph_raster_placeholder.hpp).
- */
+/** Single-line UTF‑8 measure / walker: **NotoSans** (**stb_truetype**) when the bundled face
+ *  parses; **legacy stub** tables if not. Invalid UTF‑8 → **`U+FFFD`**; stops at first **`\\n`**. */
 TextLineMetrics text_measure_utf8_line_stub(uint32_t font_px, const char *utf8_bytes,
                                             size_t utf8_byte_len) noexcept;
 
@@ -39,5 +35,14 @@ void text_layout_placeholder_centered(const cgfx_layout_rect &bounds,
                                       const TextLineMetrics &metrics,
                                       uint32_t horizontal_cap_px,
                                       TextPlaceholderBox *out) noexcept;
+
+/** Single-line walker used by rasterization — matches `text_measure_utf8_line_stub` advances /
+ * newline / invalid UTF-8 rules. */
+typedef void (*TextStubUtf8GlyphFn)(char32_t codepoint, uint32_t advance_px,
+                                    void *user_data);
+void text_stub_utf8_line_foreach_glyph(uint32_t font_px, const char *utf8_bytes,
+                                       size_t utf8_byte_len,
+                                       TextStubUtf8GlyphFn fn,
+                                       void *user_data) noexcept;
 
 } // namespace cgfx

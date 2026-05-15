@@ -1,7 +1,11 @@
 #include "core/widget_tree.hpp"
 
+#include "animation/anim_paint_modifier.hpp"
+
 #include <algorithm>
+#include <cmath>
 #include <unordered_set>
+#include <utility>
 #include <vector>
 
 namespace cgfx {
@@ -25,9 +29,10 @@ bool logical_point_in_rect(int32_t x, int32_t y,
 }
 
 template <typename Pred>
-uint64_t hit_test_recursive_idx_pred(const WidgetTree &tree,
-                                   size_t node_index, int32_t x, int32_t y,
-                                   Pred &&include_subtree_under_node) noexcept {
+uint64_t hit_test_recursive_idx_pred_paint(
+    const WidgetTree &tree, size_t node_index, int32_t x, int32_t y,
+    Pred &&include_subtree_under_node,
+    const IAnimPaintCompositor *paint_compositor) noexcept {
   const std::vector<WidgetNode> &nodes = tree.nodes();
   if (node_index >= nodes.size()) {
     return CGFX_WIDGET_ID_NONE;
@@ -39,7 +44,17 @@ uint64_t hit_test_recursive_idx_pred(const WidgetTree &tree,
   if (!include_subtree_under_node(n.id)) {
     return CGFX_WIDGET_ID_NONE;
   }
-  if (!logical_point_in_rect(x, y, n.bounds)) {
+  cgfx_layout_rect hit_rect = n.bounds;
+  if (paint_compositor != nullptr) {
+    AnimPaintMod m{};
+    if (paint_compositor->try_get_mod(n.id, &m) && m.has_translate) {
+      hit_rect.x +=
+          static_cast<int32_t>(std::llround(static_cast<double>(m.translate_x_px)));
+      hit_rect.y +=
+          static_cast<int32_t>(std::llround(static_cast<double>(m.translate_y_px)));
+    }
+  }
+  if (!logical_point_in_rect(x, y, hit_rect)) {
     return CGFX_WIDGET_ID_NONE;
   }
 
@@ -47,13 +62,21 @@ uint64_t hit_test_recursive_idx_pred(const WidgetTree &tree,
    *  last child is “on top” among siblings. */
   for (auto it = n.children.rbegin(); it != n.children.rend(); ++it) {
     const size_t c = *it;
-    const uint64_t deep =
-        hit_test_recursive_idx_pred(tree, c, x, y, include_subtree_under_node);
+    const uint64_t deep = hit_test_recursive_idx_pred_paint(
+        tree, c, x, y, include_subtree_under_node, paint_compositor);
     if (deep != CGFX_WIDGET_ID_NONE) {
       return deep;
     }
   }
   return n.id;
+}
+
+template <typename Pred>
+uint64_t hit_test_recursive_idx_pred(const WidgetTree &tree,
+                                     size_t node_index, int32_t x, int32_t y,
+                                     Pred &&include_subtree_under_node) noexcept {
+  return hit_test_recursive_idx_pred_paint(
+      tree, node_index, x, y, std::forward<Pred>(include_subtree_under_node), nullptr);
 }
 
 uint64_t hit_test_recursive_idx(const WidgetTree &tree, size_t node_index,
@@ -350,6 +373,34 @@ uint64_t WidgetTree::hit_test_logical_filtered(int32_t x, int32_t y,
                                          user_data](cgfx_widget_id id) noexcept {
         return filter(id, user_data);
       });
+}
+
+uint64_t WidgetTree::hit_test_logical_paint_visual(
+    int32_t x, int32_t y,
+    const IAnimPaintCompositor *compositor) const noexcept {
+  if (nodes_.empty()) {
+    return CGFX_WIDGET_ID_NONE;
+  }
+  return hit_test_recursive_idx_pred_paint(
+      *this, 0, x, y,
+      [](cgfx_widget_id) noexcept -> bool { return true; }, compositor);
+}
+
+uint64_t WidgetTree::hit_test_logical_filtered_paint_visual(
+    int32_t x, int32_t y, LogicalHitFilter filter, void *user_data,
+    const IAnimPaintCompositor *compositor) const noexcept {
+  if (nodes_.empty()) {
+    return CGFX_WIDGET_ID_NONE;
+  }
+  if (!filter) {
+    return hit_test_logical_paint_visual(x, y, compositor);
+  }
+  return hit_test_recursive_idx_pred_paint(
+      *this, /*root_index=*/0, x, y,
+      [filter, user_data](cgfx_widget_id id) noexcept {
+        return filter(id, user_data);
+      },
+      compositor);
 }
 
 void WidgetTree::append_ancestors_leaf_to_root(

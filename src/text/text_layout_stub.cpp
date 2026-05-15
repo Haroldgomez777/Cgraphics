@@ -1,5 +1,8 @@
 #include "text/text_layout_stub.hpp"
 
+#include "text/text_truetype_face.hpp"
+#include "text/text_utf8.hpp"
+
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
@@ -8,8 +11,6 @@
 namespace cgfx {
 
 namespace {
-
-constexpr char32_t kRep = 0xFFFD;
 
 uint32_t narrow_advance_px(uint32_t font_px) noexcept {
   if (font_px == 0U) {
@@ -84,97 +85,74 @@ uint32_t advance_for_codepoint(char32_t cp, uint32_t font_px) noexcept {
       n, (n * 3U + (w * 2U) + 4U) / 5U); // ~0.6n + 0.4w blended
 }
 
-bool utf8_next_codepoint(const char *&p, const char *end, char32_t &out) noexcept {
-  if (p >= end) {
-    return false;
+TextLineMetrics measure_utf8_line_fallback(uint32_t font_px, const char *utf8_bytes,
+                                            size_t utf8_byte_len) noexcept {
+  TextLineMetrics m{};
+  if (utf8_bytes && utf8_byte_len == 0U) {
+    utf8_byte_len = std::strlen(utf8_bytes);
   }
-  const auto u0 = static_cast<unsigned char>(*p);
-  if (u0 < 0x80U) {
-    out = static_cast<char32_t>(u0);
-    p += 1;
-    return true;
+  if (font_px == 0U || !utf8_bytes) {
+    return m;
   }
-  if ((u0 & 0xE0U) == 0xC0U) {
-    if (end - p < 2) {
-      out = kRep;
-      p += 1;
-      return true;
+  m.ascent_px = std::max<uint32_t>(
+      1U, static_cast<uint32_t>((static_cast<uint64_t>(font_px) * 4ULL + 4ULL) / 5ULL));
+  m.descent_px = std::max<uint32_t>(1U, font_px - m.ascent_px);
+  m.line_height_px = m.ascent_px + m.descent_px;
+
+  const char *p = utf8_bytes;
+  const char *end = utf8_bytes + utf8_byte_len;
+  uint64_t acc = 0;
+  while (p < end) {
+    char32_t cp = 0;
+    const char *before = p;
+    (void)text_utf8_next_codepoint(p, end, cp);
+    if (p == before) {
+      break;
     }
-    const auto u1 = static_cast<unsigned char>(p[1]);
-    if ((u1 & 0xC0U) != 0x80U) {
-      out = kRep;
-      p += 1;
-      return true;
+    if (cp == U'\r') {
+      continue;
     }
-    const char32_t cp = (static_cast<char32_t>(u0 & 0x1FU) << 6) |
-                        static_cast<char32_t>(u1 & 0x3FU);
-    if (cp < 0x80U) {
-      out = kRep;
-      p += 1;
-      return true;
+    if (cp == U'\n') {
+      break;
     }
-    out = cp;
-    p += 2;
-    return true;
+    const uint32_t adv = advance_for_codepoint(cp, font_px);
+    acc += adv;
+    if (acc > UINT32_MAX) {
+      acc = UINT32_MAX;
+      break;
+    }
   }
-  if ((u0 & 0xF0U) == 0xE0U) {
-    if (end - p < 3) {
-      out = kRep;
-      p += 1;
-      return true;
-    }
-    const auto u1 = static_cast<unsigned char>(p[1]);
-    const auto u2 = static_cast<unsigned char>(p[2]);
-    if (((u1 & 0xC0U) != 0x80U) || ((u2 & 0xC0U) != 0x80U)) {
-      out = kRep;
-      p += 1;
-      return true;
-    }
-    const char32_t cp = (static_cast<char32_t>(u0 & 0x0FU) << 12) |
-                        (static_cast<char32_t>(u1 & 0x3FU) << 6) |
-                        static_cast<char32_t>(u2 & 0x3FU);
-    if (cp < 0x800U ||
-        (cp >= 0xD800U && cp <= 0xDFFF)) { /* surrogate-ish */
-      out = kRep;
-      p += 1;
-      return true;
-    }
-    out = cp;
-    p += 3;
-    return true;
+  m.width_px = static_cast<uint32_t>(acc);
+  return m;
+}
+
+void stub_utf8_line_foreach_glyph_fallback(uint32_t font_px, const char *utf8_bytes,
+                                           size_t utf8_byte_len,
+                                           TextStubUtf8GlyphFn fn,
+                                           void *user_data) noexcept {
+  if (!utf8_bytes || !fn || font_px == 0U) {
+    return;
   }
-  if ((u0 & 0xF8U) == 0xF0U) {
-    if (end - p < 4) {
-      out = kRep;
-      p += 1;
-      return true;
-    }
-    const auto u1 = static_cast<unsigned char>(p[1]);
-    const auto u2 = static_cast<unsigned char>(p[2]);
-    const auto u3 = static_cast<unsigned char>(p[3]);
-    if (((u1 & 0xC0U) != 0x80U) || ((u2 & 0xC0U) != 0x80U) ||
-        ((u3 & 0xC0U) != 0x80U)) {
-      out = kRep;
-      p += 1;
-      return true;
-    }
-    const char32_t cp =
-        (static_cast<char32_t>(u0 & 0x07U) << 18) |
-        (static_cast<char32_t>(u1 & 0x3FU) << 12) |
-        (static_cast<char32_t>(u2 & 0x3FU) << 6) |
-        static_cast<char32_t>(u3 & 0x3FU);
-    if (cp < 0x10000U || cp > 0x10FFFFU) {
-      out = kRep;
-      p += 1;
-      return true;
-    }
-    out = cp;
-    p += 4;
-    return true;
+  if (utf8_byte_len == 0U) {
+    utf8_byte_len = std::strlen(utf8_bytes);
   }
-  out = kRep;
-  p += 1;
-  return true;
+  const char *p = utf8_bytes;
+  const char *end = utf8_bytes + utf8_byte_len;
+  while (p < end) {
+    char32_t cp = 0;
+    const char *before = p;
+    (void)text_utf8_next_codepoint(p, end, cp);
+    if (p == before) {
+      break;
+    }
+    if (cp == U'\r') {
+      continue;
+    }
+    if (cp == U'\n') {
+      break;
+    }
+    fn(cp, advance_for_codepoint(cp, font_px), user_data);
+  }
 }
 
 } // namespace
@@ -201,43 +179,23 @@ uint32_t text_logical_font_px_round(float font_size_sp, float dpi_scale) noexcep
 
 TextLineMetrics text_measure_utf8_line_stub(uint32_t font_px, const char *utf8_bytes,
                                             size_t utf8_byte_len) noexcept {
-  TextLineMetrics m{};
-  if (utf8_bytes && utf8_byte_len == 0U) {
-    utf8_byte_len = std::strlen(utf8_bytes);
+  BuiltinTruetypeFace &face = BuiltinTruetypeFace::instance();
+  if (face.ensure_init()) {
+    return face.measure_utf8_line(font_px, utf8_bytes, utf8_byte_len);
   }
-  if (font_px == 0U || !utf8_bytes) {
-    return m;
-  }
-  m.ascent_px = std::max<uint32_t>(
-      1U, static_cast<uint32_t>((static_cast<uint64_t>(font_px) * 4ULL + 4ULL) / 5ULL));
-  m.descent_px = std::max<uint32_t>(1U, font_px - m.ascent_px);
-  m.line_height_px = m.ascent_px + m.descent_px;
+  return measure_utf8_line_fallback(font_px, utf8_bytes, utf8_byte_len);
+}
 
-  const char *p = utf8_bytes;
-  const char *end = utf8_bytes + utf8_byte_len;
-  uint64_t acc = 0;
-  while (p < end) {
-    char32_t cp = 0;
-    const char *before = p;
-    (void)utf8_next_codepoint(p, end, cp);
-    if (p == before) {
-      break;
-    }
-    if (cp == U'\r') {
-      continue;
-    }
-    if (cp == U'\n') {
-      break;
-    }
-    const uint32_t adv = advance_for_codepoint(cp, font_px);
-    acc += adv;
-    if (acc > UINT32_MAX) {
-      acc = UINT32_MAX;
-      break;
-    }
+void text_stub_utf8_line_foreach_glyph(uint32_t font_px, const char *utf8_bytes,
+                                       size_t utf8_byte_len,
+                                       TextStubUtf8GlyphFn fn,
+                                       void *user_data) noexcept {
+  BuiltinTruetypeFace &face = BuiltinTruetypeFace::instance();
+  if (face.ensure_init()) {
+    face.utf8_line_foreach_glyph(font_px, utf8_bytes, utf8_byte_len, fn, user_data);
+    return;
   }
-  m.width_px = static_cast<uint32_t>(acc);
-  return m;
+  stub_utf8_line_foreach_glyph_fallback(font_px, utf8_bytes, utf8_byte_len, fn, user_data);
 }
 
 void text_layout_placeholder_centered(const cgfx_layout_rect &bounds,

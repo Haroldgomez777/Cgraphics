@@ -9,6 +9,8 @@
 
 namespace cgfx {
 
+class IAnimPaintCompositor;
+
 struct WidgetStyle {
   enum class Axis : uint8_t { Row = 0, Column = 1 };
   enum class SizeKind : uint8_t { Auto = 0, Fixed = 1 };
@@ -77,6 +79,17 @@ public:
   uint64_t hit_test_logical_filtered(int32_t x, int32_t y,
                                       LogicalHitFilter filter,
                                       void *user_data) const noexcept;
+
+  /** Like `hit_test_logical`, but when @p compositor is non-null, each widget's rectangle is
+   *  offset by active **translate** clips (rounding matches BasicWidgets paint). */
+  uint64_t hit_test_logical_paint_visual(
+      int32_t x, int32_t y,
+      const IAnimPaintCompositor *compositor) const noexcept;
+
+  /** Filtered `hit_test_logical_paint_visual`. */
+  uint64_t hit_test_logical_filtered_paint_visual(
+      int32_t x, int32_t y, LogicalHitFilter filter, void *user_data,
+      const IAnimPaintCompositor *compositor) const noexcept;
 
   /** Appends @p leaf, its parent, …, ending at the intrinsic root (**inner-first**).
    *  If @p leaf is `CGFX_WIDGET_ID_NONE` or not an alive handle, returns without

@@ -16,6 +16,10 @@
 #include <GL/gl.h>
 #endif
 
+#ifndef GL_CLAMP_TO_EDGE
+#define GL_CLAMP_TO_EDGE 0x812F
+#endif
+
 namespace cgfx {
 
 namespace {
@@ -179,6 +183,91 @@ public:
         glDisable(GL_SCISSOR_TEST);
         break;
       }
+      case RenderCommandType::GlyphAtlasPass: {
+        if (frame_width_px_ <= 0 || frame_height_px_ <= 0) {
+          return CGFX_ERROR_PLATFORM;
+        }
+        const uint32_t aw = cmd.glyph_atlas_pass.atlas_width_px;
+        const uint32_t ah = cmd.glyph_atlas_pass.atlas_height_px;
+        const size_t rgba_off = cmd.glyph_atlas_pass.rgba_byte_offset;
+        const size_t rgba_len = cmd.glyph_atlas_pass.rgba_byte_count;
+        const size_t q_off = cmd.glyph_atlas_pass.quad_storage_offset;
+        const size_t q_count = cmd.glyph_atlas_pass.quad_count;
+        const std::vector<uint8_t> &blob = commands.glyph_atlas_pixel_blob();
+        const std::vector<RenderGlyphQuadItem> &qstore =
+            commands.glyph_quad_storage();
+        if (rgba_len < static_cast<size_t>(aw) * static_cast<size_t>(ah) * 4U) {
+          return CGFX_ERROR_PLATFORM;
+        }
+        if (rgba_off > blob.size() || rgba_len > blob.size() - rgba_off) {
+          return CGFX_ERROR_PLATFORM;
+        }
+        const size_t q_end = q_off + q_count;
+        if (q_off > qstore.size() || q_end > qstore.size() || q_end < q_off) {
+          return CGFX_ERROR_PLATFORM;
+        }
+
+        if (glyph_atlas_texture_name_ == 0U) {
+          glGenTextures(1, &glyph_atlas_texture_name_);
+        }
+
+        glPushAttrib(GL_ALL_ATTRIB_BITS);
+        glDisable(GL_SCISSOR_TEST);
+        glEnable(GL_BLEND);
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+        glEnable(GL_TEXTURE_2D);
+        glBindTexture(GL_TEXTURE_2D, glyph_atlas_texture_name_);
+        glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+        glTexEnvf(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, static_cast<GLsizei>(aw),
+                     static_cast<GLsizei>(ah), 0, GL_RGBA, GL_UNSIGNED_BYTE,
+                     blob.data() + rgba_off);
+
+        glMatrixMode(GL_PROJECTION);
+        glPushMatrix();
+        glLoadIdentity();
+        glOrtho(0.0, static_cast<GLdouble>(frame_width_px_),
+                static_cast<GLdouble>(frame_height_px_), 0.0, -1.0, 1.0);
+        glMatrixMode(GL_MODELVIEW);
+        glPushMatrix();
+        glLoadIdentity();
+
+        for (size_t i = 0; i < q_count; ++i) {
+          const RenderGlyphQuadItem &q = qstore[q_off + i];
+          if (q.dst_w_px == 0U || q.dst_h_px == 0U) {
+            continue;
+          }
+          const float x0 = static_cast<float>(q.dst_x_px);
+          const float y0 = static_cast<float>(q.dst_y_px);
+          const float x1 = x0 + static_cast<float>(q.dst_w_px);
+          const float y1 = y0 + static_cast<float>(q.dst_h_px);
+          const float tv0 = 1.0f - q.v0;
+          const float tv1 = 1.0f - q.v1;
+          glColor4f(clamp_unit(q.red), clamp_unit(q.green), clamp_unit(q.blue),
+                    clamp_unit(q.alpha));
+          glBegin(GL_QUADS);
+          glTexCoord2f(q.u0, tv0);
+          glVertex2f(x0, y0);
+          glTexCoord2f(q.u1, tv0);
+          glVertex2f(x1, y0);
+          glTexCoord2f(q.u1, tv1);
+          glVertex2f(x1, y1);
+          glTexCoord2f(q.u0, tv1);
+          glVertex2f(x0, y1);
+          glEnd();
+        }
+
+        glMatrixMode(GL_MODELVIEW);
+        glPopMatrix();
+        glMatrixMode(GL_PROJECTION);
+        glPopMatrix();
+        glPopAttrib();
+        break;
+      }
       default:
         return CGFX_ERROR_UNSUPPORTED;
       }
@@ -191,6 +280,7 @@ public:
 private:
   int frame_width_px_{0};
   int frame_height_px_{0};
+  unsigned int glyph_atlas_texture_name_{0};
 };
 
 } // namespace

@@ -33,6 +33,9 @@ set(CGFX_PUBLIC_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/include")
   src/render/render_gl_device.cpp
   src/text/font_registry.cpp
   src/text/text_layout_stub.cpp
+  src/text/text_truetype_face.cpp
+  src/text/builtin_font_data.cpp
+  src/text/text_glyph_submit.cpp
 )
 
 target_include_directories(cgfx
@@ -41,6 +44,7 @@ target_include_directories(cgfx
     $<INSTALL_INTERFACE:include>
   PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}/src"
+    "${CMAKE_CURRENT_SOURCE_DIR}/third_party"
 )
 
 
@@ -170,6 +174,9 @@ if(CGFX_BUILD_TESTS)
       src/style/widget_style_overrides.cpp
       src/render/render_command_list.cpp
       src/text/text_layout_stub.cpp
+      src/text/text_truetype_face.cpp
+      src/text/builtin_font_data.cpp
+      src/text/text_glyph_submit.cpp
   )
   target_include_directories(cgfx_basic_widgets_test PRIVATE
       "${CMAKE_CURRENT_SOURCE_DIR}/src"
@@ -190,6 +197,9 @@ if(CGFX_BUILD_TESTS)
       src/style/widget_style_overrides.cpp
       src/render/render_command_list.cpp
       src/text/text_layout_stub.cpp
+      src/text/text_truetype_face.cpp
+      src/text/builtin_font_data.cpp
+      src/text/text_glyph_submit.cpp
   )
   target_include_directories(cgfx_phase6_style_test PRIVATE
       "${CMAKE_CURRENT_SOURCE_DIR}/src"
@@ -214,6 +224,9 @@ if(CGFX_BUILD_TESTS)
       src/style/widget_style_overrides.cpp
       src/render/render_command_list.cpp
       src/text/text_layout_stub.cpp
+      src/text/text_truetype_face.cpp
+      src/text/builtin_font_data.cpp
+      src/text/text_glyph_submit.cpp
   )
   target_include_directories(cgfx_widget_text_integration_test PRIVATE
       "${CMAKE_CURRENT_SOURCE_DIR}/src"
@@ -236,6 +249,9 @@ if(CGFX_BUILD_TESTS)
       src/style/widget_style_overrides.cpp
       src/render/render_command_list.cpp
       src/text/text_layout_stub.cpp
+      src/text/text_truetype_face.cpp
+      src/text/builtin_font_data.cpp
+      src/text/text_glyph_submit.cpp
   )
   target_include_directories(cgfx_animation_phase8_test PRIVATE
       "${CMAKE_CURRENT_SOURCE_DIR}/src"
@@ -247,6 +263,31 @@ if(CGFX_BUILD_TESTS)
   target_compile_options(cgfx_animation_phase8_test PRIVATE
       $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall -Wextra -Wpedantic>)
   add_test(NAME cgfx_animation_phase8_test COMMAND cgfx_animation_phase8_test)
+
+  add_executable(cgfx_translate_paint_hit_test tests/translate_paint_hit_test.cpp
+      src/animation/easing.cpp
+      src/animation/widget_animation_system.cpp
+      src/core/widget_tree.cpp
+      src/layout/flex_layout.cpp
+      src/widgets/basic_widgets.cpp
+      src/style/ui_theme.cpp
+      src/style/widget_style_overrides.cpp
+      src/render/render_command_list.cpp
+      src/text/text_layout_stub.cpp
+      src/text/text_truetype_face.cpp
+      src/text/builtin_font_data.cpp
+      src/text/text_glyph_submit.cpp
+  )
+  target_include_directories(cgfx_translate_paint_hit_test PRIVATE
+      "${CMAKE_CURRENT_SOURCE_DIR}/src"
+      "${CMAKE_CURRENT_SOURCE_DIR}/include"
+  )
+  set_target_properties(cgfx_translate_paint_hit_test PROPERTIES
+      CXX_STANDARD 17
+      CXX_EXTENSIONS OFF)
+  target_compile_options(cgfx_translate_paint_hit_test PRIVATE
+      $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall -Wextra -Wpedantic>)
+  add_test(NAME cgfx_translate_paint_hit_test COMMAND cgfx_translate_paint_hit_test)
 
   add_executable(cgfx_professional_app_api_smoke
     tests/professional_app_api_smoke.c)

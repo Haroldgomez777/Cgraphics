@@ -46,6 +46,8 @@ cgfx_result validate_batch_increment(size_t existing, size_t add,
 void RenderCommandList::reset() {
   commands_.clear();
   rect_batch_items_.clear();
+  glyph_atlas_blob_.clear();
+  glyph_quad_items_.clear();
 }
 
 cgfx_result RenderCommandList::append_clear_color(float red, float green,
@@ -206,6 +208,55 @@ cgfx_result RenderCommandList::append_fill_rect_batch_interleaved(
     cmd.fill_rect_batch.item_count = item_count;
     commands_.emplace_back(cmd);
 
+    return CGFX_OK;
+  } catch (const std::bad_alloc &) {
+    return CGFX_ERROR_OUT_OF_MEMORY;
+  } catch (...) {
+    return CGFX_ERROR_PLATFORM;
+  }
+}
+
+cgfx_result RenderCommandList::append_glyph_atlas_pass(
+    uint32_t atlas_w, uint32_t atlas_h, const uint8_t *rgba_pixels,
+    size_t rgba_byte_count, const RenderGlyphQuadItem *quads,
+    size_t quad_count) {
+  if (atlas_w == 0U || atlas_h == 0U) {
+    return CGFX_ERROR_INVALID_ARGUMENT;
+  }
+  const size_t expected = static_cast<size_t>(atlas_w) * static_cast<size_t>(atlas_h) * 4U;
+  if (rgba_byte_count != expected || !rgba_pixels) {
+    return CGFX_ERROR_INVALID_ARGUMENT;
+  }
+  if (quad_count > 0U && !quads) {
+    return CGFX_ERROR_INVALID_ARGUMENT;
+  }
+  try {
+    const size_t blob_off = glyph_atlas_blob_.size();
+    if (rgba_byte_count > std::numeric_limits<size_t>::max() - blob_off) {
+      return CGFX_ERROR_OUT_OF_MEMORY;
+    }
+    glyph_atlas_blob_.resize(blob_off + rgba_byte_count);
+    std::memcpy(glyph_atlas_blob_.data() + blob_off, rgba_pixels, rgba_byte_count);
+
+    const size_t qoff = glyph_quad_items_.size();
+    if (quad_count > std::numeric_limits<size_t>::max() - qoff) {
+      return CGFX_ERROR_OUT_OF_MEMORY;
+    }
+    glyph_quad_items_.resize(qoff + quad_count);
+    if (quad_count > 0U) {
+      std::memcpy(glyph_quad_items_.data() + qoff, quads,
+                  quad_count * sizeof(RenderGlyphQuadItem));
+    }
+
+    RenderCommand cmd{};
+    cmd.type = RenderCommandType::GlyphAtlasPass;
+    cmd.glyph_atlas_pass.atlas_width_px = atlas_w;
+    cmd.glyph_atlas_pass.atlas_height_px = atlas_h;
+    cmd.glyph_atlas_pass.rgba_byte_offset = blob_off;
+    cmd.glyph_atlas_pass.rgba_byte_count = rgba_byte_count;
+    cmd.glyph_atlas_pass.quad_storage_offset = qoff;
+    cmd.glyph_atlas_pass.quad_count = quad_count;
+    commands_.push_back(cmd);
     return CGFX_OK;
   } catch (const std::bad_alloc &) {
     return CGFX_ERROR_OUT_OF_MEMORY;

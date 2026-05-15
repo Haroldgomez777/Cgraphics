@@ -201,9 +201,9 @@ void CgfxWindow::reconcile_focus_after_structure_change() noexcept {
 cgfx_widget_id CgfxWindow::pick_input_logical_xy(int32_t x,
                                                 int32_t y) noexcept {
   sync_widget_layout_logical_from_surface();
-  return widget_tree_.hit_test_logical_filtered(
+  return widget_tree_.hit_test_logical_filtered_paint_visual(
       x, y, &BasicWidgets::input_visibility_filterThunk,
-      static_cast<void *>(this));
+      static_cast<void *>(this), &animations());
 }
 
 void routing_sync_pick_mouse_move_targets(CgfxWindow *w,

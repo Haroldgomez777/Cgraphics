@@ -96,7 +96,7 @@ if (cgfx_widget_bounds_logical_px(win, filler, &filler_bounds) == CGFX_OK) {
 
 **Hit-test:** Deepest descendant whose bounds contain the point `(x,y)` in **logical client pixels**. Half-open rectangles: `[x,x+width) × [y,y+height)`. Zero-area bounds never hit. **`CGFX_WIDGET_ID_NONE`** is returned only when nothing contains the coordinate (typically outside the laid-out root).
 
-**Layout snapshot:** Routed events reuse the Phase 4 flex pass driven by **`PlatformSurface::query_size_px`** (same path as **`cgfx_window_hit_test_logical_px`**), independent of backends.
+**Layout snapshot:** Routed events reuse the Phase 4 flex pass driven by **`PlatformSurface::query_size_px`** (same path as **`cgfx_window_hit_test_logical_paint_visual_px`** and **`cgfx_window_hit_test_logical_px`**), independent of backends.
 
 **Propagation:** Default remains **target-only** (backward compatible): one **`CGFX_EVENT_MOUSE_BUTTON`** / **`CGFX_EVENT_KEY`** dequeue per logical input with **`target_widget`** as the hit / focus leaf. Optional **`CGFX_INPUT_PROPAGATION_BUBBLE_TO_PARENT`** clones each pointer or keyboard event along the deterministic parent chain **inner-first** (`leaf → parent → … → root`; missed hits **`CGFX_WIDGET_ID_NONE`** still collapse to **one** slot). **`routed_widget`** on button/key payloads identifies the ancestor stop for **that** queue entry while **`target_widget`** stays the origin leaf (parity: both match in target-only mode). **`CGFX_EVENT_MOUSE_MOVE`** stays target-only regardless of policy.
 
@@ -113,7 +113,8 @@ cgfx_window_set_input_propagation_policy(win,
 
 ### Phase 4.1: C API & event fields
 
-- **`cgfx_window_hit_test_logical_px(win, x, y, &id)`** — refresh layout from surface size, then pick topmost logical hit.
+- **`cgfx_window_hit_test_logical_px(win, x, y, &id)`** — refresh layout from surface size, then pick deepest widget using **layout-only rectangles** (ignores animated paint translates).
+- **`cgfx_window_hit_test_logical_paint_visual_px(win, x, y, &id)`** — same layout refresh, plus **paint translate clips** sampled from the window’s animation timeline (matches visuals; skips visibility filtering).
 - **`cgfx_window_focus_widget` / `cgfx_window_set_focus_widget`**
 - Pointer / key payload fields **`target_widget`** (origin) and **`routed_widget`** (current delivery stop) on **`cgfx_event_mouse_button_payload`**, **`cgfx_event_key_payload`** — plus **`target_widget`** on **`cgfx_event_mouse_move_payload`**.
 - **`cgfx_context_[get|set]_default_input_propagation_policy`**, **`cgfx_window_[get|set]_input_propagation_policy`**
@@ -165,9 +166,9 @@ Phase 5 layers a **facet registry** on the existing tree/flex core (`src/widgets
 | Concern | Responsibility |
 | --- | --- |
 | **Geometry** | Phase 4 flex + `cgfx_widget_bounds_logical_px` unchanged. |
-| **Hit testing** | **`cgfx_window_hit_test_logical_px`** remains a **pure geometric** pick (back-compat). Routed pointer events (**`target_widget`** on move/button) use **`visible=false` facet** filtering so hidden subtrees behave like pass-through. |
-| **Rendering** | **`cgfx_window_draw_basic_widgets(win)`** emits fills via **Phase 6 style resolution** plus **Phase 7** deterministic text measurement (`src/text`): label and button captions use resolved **`cgfx_theme_metric_token`** font sizes scaled by **present-pass DPI**, centered placeholder rectangles sized to **`cgfx_text_measure_utf8_line_pixels`**, tinted with **`CGFX_THEME_COLOR_LABEL_TEXT`** / **`CGFX_THEME_COLOR_BUTTON_TEXT`** (not the older placeholder strips). Rasterization hooks live in **`text_glyph_raster_placeholder.hpp`** (no textured glyphs yet — see Phase 7.1 below). |
-| **Text** | UTF-8 on facets; **`cgfx_text_measure_utf8_line_pixels`** / **`cgfx_text_measure_utf8_line_cstr_pixels`**, **`cgfx_font_builtin_acquire_mono_stub`**, and **`cgfx_context_set_text_font`** (or **`cgfx_context_text_font_select`**) form the seam. Glyph upload / atlas / shaders remain **TODO** (`submit_glyph_rasterization_placeholder_todo`). |
+| **Hit testing** | **`cgfx_window_hit_test_logical_px`** stays a **pure layout** pick (back-compat). **`cgfx_window_hit_test_logical_paint_visual_px`** includes **paint translate** clips sampled from **`WidgetAnimationSystem`**. Routed pointer (**`target_widget`**) picks use **`WidgetTree::hit_test_logical_filtered_paint_visual`** (visual translate + **`visible=false` facet** subtree filtering). |
+| **Rendering** | **`cgfx_window_draw_basic_widgets(win)`** resolves Phase 6 colors, runs text measurement/DPI parity, emits solid fills plus **`GlyphAtlasPass`** textured quads for captions (CPU **NotoSans** glyph atlas shaded via OpenGL modulation / nearest-neighbor; deterministic pattern fallback only if parsing fails). |
+| **Text** | UTF-8 facets share **`cgfx_text_measure_*`** with **`submit_utf8_line_glyphs`** (`src/text/text_glyph_submit.*`): bundled **NotoSans** (**stb_truetype**) drives metrics + monochrome bitmap cells; **`FontRegistry`** remains the façade for alternate faces later. |
 | **Clicks** | **Polling model:** on left-button release after a press on the **same** logical `BUTTON` facet, the library appends **`CGFX_EVENT_WIDGET_CLICK`** with **`cgfx_event_widget_click_payload`** (**`widget_id`**, **`button`**, **`x`**, **`y`**). dequeue via **`cgfx_next_event_into`**. Disabled buttons suppress hover tinting and activation. |
 
 ```c
@@ -213,7 +214,7 @@ while (cgfx_next_event_into(ctx, &ev)) {
 
 ### Phase 5: tests
 
-- **`cgfx_basic_widgets_test`** — facet kind round-trip, UTF-8 length, **`RenderCommandList`** fill-rect tally, visibility-filter hit pass-through (**no GPU**).
+- **`cgfx_basic_widgets_test`** — facet round-trip + UTF-8 length + offline paint bookkeeping (panel/button solid fills plus glyph atlas passes behind captions), visibility-filter hit pass-through (**no GPU**).
 
 ### Phase 6: styling and theming (tokens + overrides + resolver)
 
@@ -255,16 +256,35 @@ cgfx_widget_style_query_resolved_button_face_rgba_normalized(
 
 - **`cgfx_phase6_style_test`** — token-driven paint, override vs theme vs legacy panel precedence, selective `clear_overrides` vs legacy facet, query API vs paint, hover path, pressed override via resolution queries (**no GPU**).
 
-### Phase 7: text measurement + widget integration (deterministic stub)
+### Phase 7: text measurement + glyph atlas (bundled NotoSans)
 
-Phase 7 introduces **`src/text/`**: a platform-neutral **stub font**, **deterministic UTF-8 line measurement** (no HarfBuzz/FreeType linkage yet), **`FontRegistry`** on **`cgfx_context`**, and **`BasicWidgets`** paint wired to **`cgfx_text_measure_utf8_line_pixels`** (same formulas as widgets when DPI + theme match).
+Phase 7 introduces **`src/text/`**: **`FontRegistry`** on **`cgfx_context`**, **UTF‑8 single-line measurement** aligned with **`BasicWidgets`** captions (**`cgfx_text_measure_utf8_line_pixels`** when DPI + themes match), and a **CPU glyph atlas** rasterized for the OpenGL path.
 
 | Layer | Responsibility |
 | --- | --- |
-| **`FontRegistry`** | Validates **`cgfx_font_id`** handles. Today only **`CGFX_FONT_ID_BUILTIN_DEFAULT`** (**`cgfx_font_builtin_acquire_mono_stub`** or **`cgfx_font_builtin_acquire(..., CGFX_FONT_BUILTIN_MONO_STUB)`**) is admitted. |
-| **`text_logical_font_px_round` / `text_measure_utf8_line_stub`** | Rounds **`font_size_sp * dpi_scale`** to integer pixels (`logical_font_px`). Horizontal advances classify Latin vs wide codepoint ranges plus a bounded “other-script” blend. Line box uses fixed ascent/descents derived from **`logical_font_px`**. Invalid UTF-8 advances one byte yielding **`U+FFFD`**. Measurement stops at the first **`\\n`** (single logical line API). |
-| **Raster seam** | `text_glyph_raster_placeholder.hpp` documents **`submit_glyph_rasterization_placeholder_todo`** (currently empty). **`BasicWidgets`** still emits a **centered fill-rect strip** tinted with **`label_text_color` / resolved button text color**. |
-| **Presenter DPI** | `CgfxWindow` saves the **`begin_present_pass`** DPI scale so **`cgfx_window_draw_basic_widgets`** matches device measurement without leaking Win32/X11 specifics into **`BasicWidgets`**. |
+| **`FontRegistry`** | Validates **`cgfx_font_id`** handles. **`CGFX_FONT_ID_BUILTIN_DEFAULT`** (**`cgfx_font_builtin_acquire_mono_stub`**, etc.) selects the bundled face pipeline below. |
+| **`text_logical_font_px_round` / `text_measure_utf8_line_stub`** | Rounds **`font_size_sp * dpi_scale`** to integer **`logical_font_px`**. Primary metrics come from **`BuiltinTruetypeFace`** over embedded **NotoSans** (**`third_party/fonts/NotoSans-Regular.ttf`**, raster via **`third_party/stb_truetype.h`**). **Fallback** uses the Phase‑7 heuristic stub tables only if parsing fails. Invalid UTF‑8 maps to **`U+FFFD`**; **`\\n`** truncates horizontally. |
+| **Raster / GL** | **`submit_utf8_line_glyphs`** allocates compact RGBA atlases (**`GlyphAtlasPass`**) with **per-glyph** coverage **matching** **`hmtx`** advances. **`OpenGlRenderDevice`** samples with **nearest** filtering + modulation. **`text_glyph_raster_placeholder.hpp`** forwards **`text_glyph_submit.hpp`** for breadcrumbs. |
+| **Presenter DPI** | **`CgfxWindow`** persists **`begin_present_pass`** DPI for **`cgfx_window_draw_basic_widgets`** parity vs measurement. |
+
+**Fonts:** bundled **Noto Sans** subset file is SIL **OFL** — see **`third_party/fonts/`** + upstream **[Noto Fonts](https://github.com/notofonts/noto-fonts)**. **`stb_truetype`** is public domain (**[stb](https://github.com/nothings/stb)**).
+
+#### Phase 7: tests
+
+- **`cgfx_text_measurement_test`** — C API coherence + DPI scaling + invalid args (**widths derive from outlines** rather than heuristic narrow/wide stubs).
+- **`cgfx_widget_text_integration_test`** — **`GlyphAtlasPass`** coherence (advance sums **and** visible atlas alpha masks).
+
+#### Phase 7: known limitations
+
+- **No shaping:** kerning, ligatures, bidi, emoji color fonts, complex scripts — glyphs are **`stbtt`** advance + monochrome bitmap strips per advance cell (**English/Japanese BMP coverage is realistic; exotic clusters may degrade**).
+- **`LabelFacet.marker_explicit` / `CGFX_THEME_COLOR_LABEL_PLACEHOLDER`** are **not** used for caption raster; paint uses **`CGFX_THEME_COLOR_LABEL_TEXT`** (Phase 6 overrides apply).
+- Passing **`CGFX_FONT_ID_INVALID`** to **`cgfx_text_measure_utf8_line_pixels`** resolves **`cgfx_context_get_text_font`**.
+- **Single line** API — wrapping, ellipses, rich text **future**.
+- **`FontRegistry`** does not yet load arbitrary external **`ttf`** at runtime (**additive** **`FontRegistry` / loader** seam is next).
+
+#### Phase 7.1 (next)
+
+- User-supplied **`ttf`/`otf`** bytes via **`FontRegistry`** + streaming atlas cache (**HarfBuzz**/**FreeType** optional backends behind the same façade).
 
 Measured line layout helper (standalone or ahead of sizing code). Use
 `cgfx_text_measure_utf8_line_cstr_pixels` for NUL-terminated literals; pass an explicit byte length
@@ -303,24 +323,6 @@ cgfx_context_set_text_font(ctx, face);
 - **`cgfx_context_set_text_font`** / **`cgfx_context_get_text_font`** (discoverable aliases for `cgfx_context_text_font_select` / `cgfx_context_text_font_selected`).
 - **`cgfx_text_measure_utf8_line_pixels`** and **`cgfx_text_measure_utf8_line_cstr_pixels`**: pass **`CGFX_FONT_ID_INVALID`** for `font_id` to use the context-selected font. Non-finite **`dpi_scale`** or **`<= 0`** clamps to **`1.f`**. For **`utf8_byte_length == 0`** with a non-NULL pointer, length is **`strlen`**.
 
-#### Phase 7: tests
-
-- **`cgfx_text_measurement_test`** — public C API + deterministic width rules + DPI scaling + invalid args.
-- **`cgfx_widget_text_integration_test`** — offline paint rectangles match `text_layout_placeholder_centered` planning for label + button captions.
-
-#### Phase 7: known limitations
-
-- No real glyph outlines, kerning, ligatures, bidi, or font files — metrics are **documented stub tables** only.
-- Label placeholder marker color (`LabelFacet.marker_explicit` / `CGFX_THEME_COLOR_LABEL_PLACEHOLDER`) is **not** used for the Phase 7 caption strip; paint uses **`CGFX_THEME_COLOR_LABEL_TEXT`** (plus Phase 6 text-color overrides). Use marker fields for future decoration if needed.
-- Multi-line wrapping, ellipses, and rich text remain **future** work (beyond this sample).
-- Passing **`CGFX_FONT_ID_INVALID`** to **`cgfx_text_measure_utf8_line_pixels`** resolves the context’s **`cgfx_context_text_font_selected`** (**`cgfx_context_get_text_font`**) handle.
-
-#### Phase 7.1 (next)
-
-- Load/select **platform or bundled `.ttf` / `.otf`** resources through **`FontRegistry`**, preserving the same measurement API surface where possible.
-- Implement **`submit_glyph_rasterization_placeholder_todo`** with atlas + shader path on **`RenderCommandList`** (new command bucket) while keeping **`BasicWidgets` measurement-only** coupling.
-- Optional CoreText/DirectWrite shapers behind **`text_measure_utf8_line_stub`** indirection.
-
 ### Phase 8: property animations (timeline + clock + easing)
 
 Phase 8 introduces a **small, platform-neutral animation core** wired into **`cgfx_window_begin_present_pass`** and **`cgfx_window_draw_basic_widgets`**:
@@ -336,11 +338,11 @@ Phase 8 introduces a **small, platform-neutral animation core** wired into **`cg
 
 Each **`cgfx_window_begin_present_pass`** runs flex layout, samples the context clock vs the window’s prior sample (first step uses **`dt = 0`**), clamps **`dt`** to **`0.25` s**, scales by **`animation_speed_scale`**, then advances that window’s clip timeline before recording GL commands.
 
-**Tests:** **`cgfx_animation_phase8_test`** (easing + deterministic `advance` + paint rect integration). Verification: **`cmake --preset windows-mingw-debug`**, **`cmake --build --preset build-windows-mingw-debug`**, **`ctest --preset test-windows-mingw-debug`**.
+**Tests:** **`cgfx_animation_phase8_test`** (easing + deterministic `advance` + paint rect integration), **`cgfx_translate_paint_hit_test`** (translate clips applied to hit picking). Verification: **`cmake --preset windows-mingw-debug`**, **`cmake --build --preset build-windows-mingw-debug`**, **`ctest --preset test-windows-mingw-debug`**.
 
 #### Phase 8: caveats
 
-- **Translate** offsets affect **paint only** — hit testing still uses intrinsic flex rects.
+- **Translate** offsets now feed **`WidgetTree::hit_test_logical_paint_visual`** / routed pointer picks; **`cgfx_window_hit_test_logical_px`** intentionally remains **layout-only**.
 - Stopping clips **drops** modulation (no implicit “sticky” final style).
 - Animated opacity / fill apply to **basic-widget** fill-rect emission; **`cgfx_widget_style_query_resolved_*`** remain static.
 - **Finished** clips hold the end pose and stay in the clip list (and count as “active” for **`cgfx_animation_is_active`**) until **`cgfx_animation_stop`** / **`cgfx_animation_stop_widget_property`** or widget subtree teardown.
@@ -348,7 +350,6 @@ Each **`cgfx_window_begin_present_pass`** runs flex layout, samples the context 
 
 #### Phase 8.1 (next)
 
-- Hit-test parity for translated visuals (or layout-level offset channels).
 - Completion callbacks / loops; optional auto-prune of finished clips; cheaper per-widget clip lookup than sort-on-every-paint.
 
 ### Phase 9: professional showcase application
@@ -367,7 +368,7 @@ Phase 9 delivers a **non-toy sample** under `examples/professional_app/` that ex
 
 **Regression / CI:** `cgfx_professional_app_api_smoke` (in `tests/professional_app_api_smoke.c`) links the library and validates font/measurement/theme/animation clock entry points **without creating a window** — use it when GPUs or displays are unavailable. The **`cgfx_professional_app`** binary remains the interactive harness for manual QA.
 
-**Known limitations** (same as Phases 7–8): placeholder text strips (no real glyph atlas), translate affects paint only (`cgfx_widget_bounds_logical_px` / hit-test stay in layout space), bubbling duplicates `CGFX_EVENT_MOUSE_BUTTON`/`KEY` queue entries — not `CGFX_EVENT_WIDGET_CLICK`.
+**Known limitations** (same as Phases 7–8): no HarfBuzz shaping; translate still **does not mutate** `cgfx_widget_bounds_logical_px` (**layout** remains the flex snapshot; **routed** picks use paint translate — see Phase 4/5 notes); bubbling duplicates `CGFX_EVENT_MOUSE_BUTTON`/`KEY` queue entries — not `CGFX_EVENT_WIDGET_CLICK`.
 
 #### Phase 9: run
 

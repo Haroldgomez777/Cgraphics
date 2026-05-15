@@ -10,7 +10,7 @@
 
 #include "animation/anim_paint_modifier.hpp"
 
-#include "text/text_glyph_raster_placeholder.hpp"
+#include "text/text_glyph_submit.hpp"
 #include "text/text_layout_stub.hpp"
 
 
@@ -751,16 +751,10 @@ cgfx_result BasicWidgets::paint(const WidgetTree &tree,
         apply_paint_anim_overlay(animation_compositor, id, plan_label.origin_x,
                                  plan_label.origin_y, mc, &ox, &oy, &vcol);
 
-        (void)cmds.append_fill_rect(
-            ox, oy, plan_label.width_px, plan_label.height_px, vcol.r, vcol.g, vcol.b,
-            vcol.a);
-        /** Phase 7.1: replace fill with glyph submission when raster backend lands. */
-
-        TextPlaceholderBox plan_draw = plan_label;
-        plan_draw.origin_x = ox;
-        plan_draw.origin_y = oy;
-        text_raster_backend::submit_glyph_rasterization_placeholder_todo(
-            plan_draw, m_label, cmds);
+        (void)text_raster_backend::submit_utf8_line_glyphs(
+            cmds, ox, oy, plan_label.width_px, plan_label.height_px, m_label,
+            fpx_label, lb.text_utf8.data(), lb.text_utf8.size(), vcol.r, vcol.g,
+            vcol.b, vcol.a);
 
       }
 
@@ -834,14 +828,10 @@ cgfx_result BasicWidgets::paint(const WidgetTree &tree,
           apply_paint_anim_overlay(animation_compositor, id, plan_bt.origin_x,
                                    plan_bt.origin_y, cap, &ox, &oy, &cvis);
 
-          (void)cmds.append_fill_rect(ox, oy, plan_bt.width_px,
-                                      plan_bt.height_px, cvis.r, cvis.g, cvis.b, cvis.a);
-
-          TextPlaceholderBox plan_btd = plan_bt;
-          plan_btd.origin_x = ox;
-          plan_btd.origin_y = oy;
-          text_raster_backend::submit_glyph_rasterization_placeholder_todo(plan_btd,
-                                                                             m_bt, cmds);
+          (void)text_raster_backend::submit_utf8_line_glyphs(
+              cmds, ox, oy, plan_bt.width_px, plan_bt.height_px, m_bt, fpx_bt,
+              bt.caption_utf8.data(), bt.caption_utf8.size(), cvis.r, cvis.g,
+              cvis.b, cvis.a);
 
         }
 

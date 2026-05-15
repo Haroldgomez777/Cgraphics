@@ -102,7 +102,7 @@ int main() {
       ++fill_count;
     }
   }
-  assert(fill_count == 4U);
+  assert(fill_count == 2U);
 
   cgfx_layout_rect btn_bounds{};
   assert(tree.get_bounds(btn, &btn_bounds) == CGFX_OK &&

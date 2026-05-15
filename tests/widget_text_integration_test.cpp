@@ -1,4 +1,4 @@
-/** Phase 7: offline layout + BasicWidgets placeholder geometry matches standalone measures. */
+/** Phase 7: offline layout + BasicWidgets text command list matches standalone measures. */
 
 #include "layout/flex_layout.hpp"
 #include "render/render_command_list.hpp"
@@ -11,6 +11,11 @@
 #include <cassert>
 #include <cmath>
 #include <cstdint>
+
+#include <algorithm>
+#include <climits>
+
+#include <vector>
 
 #include "core/widget_tree.hpp"
 
@@ -35,6 +40,68 @@ FillGeom nth_fill_rect(const cgfx::RenderCommandList &cmds, size_t want_index) {
     }
   }
   return FillGeom{};
+}
+
+void sum_glyph_pass_by_index(const cgfx::RenderCommandList &cmds, size_t want_pass,
+                             uint32_t *out_sum_w, size_t *out_quad_count,
+                             int32_t *first_dst_x) noexcept {
+  *out_sum_w = 0U;
+  *out_quad_count = 0U;
+  if (first_dst_x) {
+    *first_dst_x = 0;
+  }
+  size_t n = 0;
+  const std::vector<cgfx::RenderGlyphQuadItem> &q = cmds.glyph_quad_storage();
+  for (const auto &c : cmds.commands()) {
+    if (c.type != cgfx::RenderCommandType::GlyphAtlasPass) {
+      continue;
+    }
+    if (n != want_pass) {
+      ++n;
+      continue;
+    }
+    const size_t off = c.glyph_atlas_pass.quad_storage_offset;
+    const size_t qc = c.glyph_atlas_pass.quad_count;
+    *out_quad_count = qc;
+    uint32_t acc = 0U;
+    for (size_t i = 0; i < qc; ++i) {
+      acc += q[off + i].dst_w_px;
+    }
+    *out_sum_w = acc;
+    if (qc > 0U && first_dst_x) {
+      *first_dst_x = q[off].dst_x_px;
+    }
+    return;
+  }
+}
+
+bool glyph_atlas_pass_has_visible_mask(const cgfx::RenderCommandList &cmds,
+                                       size_t want_pass_idx) noexcept {
+  size_t n = 0;
+  const std::vector<uint8_t> &blob = cmds.glyph_atlas_pixel_blob();
+  for (const auto &c : cmds.commands()) {
+    if (c.type != cgfx::RenderCommandType::GlyphAtlasPass) {
+      continue;
+    }
+    if (n != want_pass_idx) {
+      ++n;
+      continue;
+    }
+    const auto &gap = c.glyph_atlas_pass;
+    const size_t rgba_off = gap.rgba_byte_offset;
+    const size_t rgba_len = gap.rgba_byte_count;
+    if (rgba_off > blob.size() || rgba_len > blob.size() - rgba_off ||
+        rgba_len < 4U) {
+      return false;
+    }
+    for (size_t i = rgba_off + 3U; i < rgba_off + rgba_len; i += 4U) {
+      if (blob[i] != 0U) {
+        return true;
+      }
+    }
+    return false;
+  }
+  return false;
 }
 
 } // namespace
@@ -98,7 +165,7 @@ int main() {
   const float sp_btn =
       cgfx::style_resolution::resolve_button_font_size_sp(theme, norec);
   const uint32_t fpx_btn = cgfx::text_logical_font_px_round(sp_btn, 1.f);
-  const cgfx::TextLineMetrics m_btn =
+  const cgfx::TextLineMetrics m_bt =
       cgfx::text_measure_utf8_line_stub(fpx_btn, "Ok", 2);
   cgfx_layout_rect btn_bounds{};
   assert(tree.get_bounds(btn, &btn_bounds) == CGFX_OK);
@@ -107,23 +174,52 @@ int main() {
   const uint32_t inner_w =
       btn_bounds.width > pad_clamped * 2U ? btn_bounds.width - pad_clamped * 2U
                                         : btn_bounds.width;
-  cgfx::TextPlaceholderBox plan_btn{};
-  cgfx::text_layout_placeholder_centered(btn_bounds, m_btn, inner_w, &plan_btn);
+  cgfx::TextPlaceholderBox plan_bt{};
+  cgfx::text_layout_placeholder_centered(btn_bounds, m_bt, inner_w, &plan_bt);
 
   RenderCommandList cmds{};
   assert(widgets.paint(tree, cmds, theme, ovs, 1.0f) == CGFX_OK);
 
-  const FillGeom g_label = nth_fill_rect(cmds, 1);
-  assert(g_label.w == plan_label.width_px);
-  assert(g_label.h == plan_label.height_px);
-  assert(g_label.x == plan_label.origin_x);
-  assert(g_label.y == plan_label.origin_y);
+  /** preorder: panel face, label glyph pass, button face, caption glyph pass */
+  const FillGeom g_panel = nth_fill_rect(cmds, 0);
+  cgfx_layout_rect panel_bounds{};
+  assert(tree.get_bounds(panel, &panel_bounds) == CGFX_OK);
+  assert(g_panel.w == panel_bounds.width);
+  assert(g_panel.h == panel_bounds.height);
+  assert(g_panel.x == panel_bounds.x);
+  assert(g_panel.y == panel_bounds.y);
 
-  const FillGeom g_btn = nth_fill_rect(cmds, 3);
-  assert(g_btn.w == plan_btn.width_px);
-  assert(g_btn.h == plan_btn.height_px);
-  assert(g_btn.x == plan_btn.origin_x);
-  assert(g_btn.y == plan_btn.origin_y);
+  const FillGeom g_btn_face = nth_fill_rect(cmds, 1);
+  assert(g_btn_face.w == btn_bounds.width);
+  assert(g_btn_face.h == btn_bounds.height);
+  assert(g_btn_face.x == btn_bounds.x);
+  assert(g_btn_face.y == btn_bounds.y);
+
+  uint32_t sum_lbl{};
+  size_t qc_lbl{};
+  int32_t first_lbl_x{};
+  sum_glyph_pass_by_index(cmds, 0U, &sum_lbl, &qc_lbl, &first_lbl_x);
+  assert(sum_lbl == m_label.width_px);
+  assert(qc_lbl == 2U);
+  const uint64_t clipped_lbl =
+      m_label.width_px > plan_label.width_px ? plan_label.width_px : m_label.width_px;
+  const int64_t expect_lbl_x64 =
+      static_cast<int64_t>(plan_label.origin_x) +
+      (static_cast<int64_t>(plan_label.width_px) - static_cast<int64_t>(clipped_lbl)) /
+          INT64_C(2);
+  const int32_t expect_lbl_x = static_cast<int32_t>(std::clamp(
+      expect_lbl_x64, static_cast<int64_t>(INT32_MIN),
+      static_cast<int64_t>(INT32_MAX)));
+  assert(first_lbl_x == expect_lbl_x);
+
+  uint32_t sum_bt{};
+  size_t qc_bt{};
+  sum_glyph_pass_by_index(cmds, 1U, &sum_bt, &qc_bt, nullptr);
+  assert(sum_bt == m_bt.width_px);
+  assert(qc_bt == 2U);
+
+  assert(glyph_atlas_pass_has_visible_mask(cmds, 0U));
+  assert(glyph_atlas_pass_has_visible_mask(cmds, 1U));
 
   return 0;
 }

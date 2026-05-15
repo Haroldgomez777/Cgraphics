@@ -12,10 +12,17 @@ static int ck(int cond, const char *msg, int code) {
   return 0;
 }
 
-/** Expected narrow advance stub for latin @ 13px (matches `narrow_advance_px` rounding). */
-static uint32_t narrow_13(void) {
-  const uint64_t n = ((uint64_t)13 * 62ULL + 99ULL) / 100ULL;
-  return (uint32_t)((n > 0ULL ? n : 1ULL));
+/** Expected width for "Hi" at 13px from built-in scaled NotoSans via the same path as widgets. */
+static uint32_t hi_width_13(cgfx_context *ctx, cgfx_font_id fid) {
+  cgfx_text_line_metrics m_h = {};
+  cgfx_text_line_metrics m_i = {};
+  if (cgfx_text_measure_utf8_line_pixels(ctx, fid, "H", 1, 13.f, 1.f, &m_h) != CGFX_OK) {
+    return 0U;
+  }
+  if (cgfx_text_measure_utf8_line_pixels(ctx, fid, "i", 1, 13.f, 1.f, &m_i) != CGFX_OK) {
+    return 0U;
+  }
+  return m_h.width_px + m_i.width_px;
 }
 
 int main(void) {
@@ -49,8 +56,8 @@ int main(void) {
   if (ck(cgfx_text_measure_utf8_line_pixels(ctx, fid, "Hi", 2, 13.f, 1.f,
                                            &m_hi) == CGFX_OK &&
              m_hi.logical_font_px == 13U &&
-             m_hi.line_height_px == m_hi.ascent_px + m_hi.descent_px &&
-             m_hi.width_px == narrow_13() * 2U,
+             m_hi.line_height_px >= m_hi.ascent_px + m_hi.descent_px &&
+             m_hi.width_px == hi_width_13(ctx, fid),
          "measure_hi", 5)) {
     cgfx_context_destroy(ctx);
     return 5;
@@ -61,19 +68,25 @@ int main(void) {
   if (ck(cgfx_text_measure_utf8_line_pixels(ctx, CGFX_FONT_ID_INVALID /*context default*/,
                                             nl, sizeof(nl) - 1U, 13.f, 1.f,
                                             &m_nl) == CGFX_OK &&
-             m_nl.width_px == narrow_13() * 2U,
+             m_nl.width_px == hi_width_13(ctx, fid),
          "measure_newline_trunc", 6)) {
     cgfx_context_destroy(ctx);
     return 6;
   }
 
-  /** U+3042 HIRAGANA A — wide deterministic cell (advance == font_px at 13). */
+  /** Hiragana glyph should be at least as wide as a typical Latin letter at the same px. */
+  cgfx_text_line_metrics m_narrow = {};
+  if (cgfx_text_measure_utf8_line_pixels(ctx, fid, "A", 1, 13.f, 1.f, &m_narrow) != CGFX_OK ||
+      m_narrow.width_px == 0U) {
+    cgfx_context_destroy(ctx);
+    return 7;
+  }
   cgfx_text_line_metrics m_wide = {};
   static const unsigned char hiragana_a_utf8[] = {0xE3, 0x81, 0x82};
   if (ck(cgfx_text_measure_utf8_line_pixels(ctx, fid, (const char *)hiragana_a_utf8,
                                             sizeof hiragana_a_utf8, 13.f, 1.f,
                                             &m_wide) == CGFX_OK &&
-             m_wide.width_px == 13U && m_wide.width_px > narrow_13(),
+             m_wide.width_px >= m_narrow.width_px,
          "measure_wide", 7)) {
     cgfx_context_destroy(ctx);
     return 7;

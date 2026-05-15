@@ -275,6 +275,10 @@ bool WidgetAnimationSystem::try_get_mod(cgfx_widget_id widget_id,
     }
   }
 
+  if (!have_t && !have_o && !have_f) {
+    return false;
+  }
+
   *out_mod = m;
   return true;
 }
