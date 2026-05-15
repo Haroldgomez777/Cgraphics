@@ -100,7 +100,7 @@ Notes:
 - The `-C Release` flag is primarily relevant for multi-config generators (for example, Visual Studio).
 - For single-config generators (Ninja/Make), this command still works with the existing build directory.
 
-## Baseline Verification (Phase 1)
+## Baseline Verification (Phase 2)
 
 Phase 1 baseline is considered stable when all of these pass:
 - Configure: `cmake --preset windows-mingw-debug` (or equivalent platform preset)
