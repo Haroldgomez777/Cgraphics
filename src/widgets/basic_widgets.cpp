@@ -447,6 +447,14 @@ void BasicWidgets::on_mouse_move_logical(const WidgetTree &tree,
 
   }
 
+  if (!chain_visible_for_input_hit(tree, button_id)) {
+
+    hovered_button_logical_ = CGFX_WIDGET_ID_NONE;
+
+    return;
+
+  }
+
   const auto it = facets_.find(button_id);
 
   if (it == facets_.end() || it->second.kind != BasicWidgetKind::Button) {
@@ -515,7 +523,9 @@ void BasicWidgets::on_mouse_button_logical(
 
                                              p.target_widget);
 
-    if (button_hit != CGFX_WIDGET_ID_NONE) {
+    if (button_hit != CGFX_WIDGET_ID_NONE &&
+
+        chain_visible_for_input_hit(window->widget_tree(), button_hit)) {
 
       const auto it = facets_.find(button_hit);
 
@@ -553,7 +563,10 @@ void BasicWidgets::on_mouse_button_logical(
 
                                                p.target_widget);
 
-      if (release_button == capture_button_logical_ && out_click) {
+      if (release_button == capture_button_logical_ && out_click &&
+
+          chain_visible_for_input_hit(window->widget_tree(),
+                                      capture_button_logical_)) {
 
         const auto it = facets_.find(capture_button_logical_);
 
@@ -609,7 +622,14 @@ cgfx_result BasicWidgets::paint(const WidgetTree &tree,
 
     const auto it = facets_.find(id);
 
-    if (it == facets_.end() || !it->second.visible) {
+    if (it == facets_.end()) {
+
+      continue;
+
+    }
+
+    /** Match hit-testing: descendants do not paint when any ancestor facet is `visible=false`. */
+    if (!chain_visible_for_input_hit(tree, id)) {
 
       continue;
 
@@ -768,6 +788,17 @@ cgfx_result BasicWidgets::set_visible(cgfx_widget_id id, bool visible) noexcept 
   }
 
   it->second.visible = visible;
+
+  /** Avoid stale hover/press bookkeeping when hiding the active button directly. */
+  if (!visible) {
+    if (hovered_button_logical_ == id) {
+      hovered_button_logical_ = CGFX_WIDGET_ID_NONE;
+    }
+    if (capture_button_logical_ == id) {
+      capture_button_logical_ = CGFX_WIDGET_ID_NONE;
+      left_pressed_on_capture_ = false;
+    }
+  }
 
   return CGFX_OK;
 

@@ -164,7 +164,7 @@ Phase 5 layers a **facet registry** on the existing tree/flex core (`src/widgets
 | --- | --- |
 | **Geometry** | Phase 4 flex + `cgfx_widget_bounds_logical_px` unchanged. |
 | **Hit testing** | **`cgfx_window_hit_test_logical_px`** remains a **pure geometric** pick (back-compat). Routed pointer events (**`target_widget`** on move/button) use **`visible=false` facet** filtering so hidden subtrees behave like pass-through. |
-| **Rendering** | **`cgfx_window_draw_basic_widgets(win)`** emits filled rectangles into the existing command list (call after layout, during a present pass). |
+| **Rendering** | **`cgfx_window_draw_basic_widgets(win)`** emits filled rectangles into the existing command list (call after layout, during a present pass). Ancestor **`visible=false`** facets suppress painting for that facet’s descendants (same subtree rule as hit filtering). |
 | **Text** | Labels and button captions store UTF-8; paint uses a **thin placeholder strip** whose width tracks byte length. **TODO(seam):** replace placeholder path with the future text engine (Phase 6/7); keep `cgfx_basic_widget_utf8_text_*` stable. |
 | **Clicks** | **Polling model:** on left-button release after a press on the **same** logical `BUTTON` facet, the library appends **`CGFX_EVENT_WIDGET_CLICK`** with **`cgfx_event_widget_click_payload`** (**`widget_id`**, **`button`**, **`x`**, **`y`**). dequeue via **`cgfx_next_event_into`**. Disabled buttons suppress hover tinting and activation. |
 

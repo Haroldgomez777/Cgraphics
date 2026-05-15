@@ -122,5 +122,25 @@ int main() {
       static_cast<void *>(&vis_payload));
   assert(miss == tree.root_id());
 
+  /** Subtree visibility: nothing under the hidden panel paints (not just the panel leaf). */
+
+  cmds.reset();
+
+  assert(widgets.paint(tree, cmds) == CGFX_OK);
+
+  fill_count = 0U;
+
+  for (const auto &cmd : cmds.commands()) {
+
+    if (cmd.type == cgfx::RenderCommandType::FillRect) {
+
+      ++fill_count;
+
+    }
+
+  }
+
+  assert(fill_count == 0U);
+
   return 0;
 }
