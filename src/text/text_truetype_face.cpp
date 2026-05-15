@@ -241,7 +241,7 @@ void BuiltinTruetypeFace::raster_glyph_white(char32_t cp, uint32_t font_px, uint
 
   thread_local std::vector<unsigned char> scratch{};
   scratch.resize(static_cast<size_t>(bw) * static_cast<size_t>(bh));
-  stbtt_MakeCodepointBitmap(&g.fi, scratch.data(), bw, bw, bw, scale, scale, icp);
+  stbtt_MakeCodepointBitmap(&g.fi, scratch.data(), bw, bh, bw, scale, scale, icp);
 
   const int lsb_x = static_cast<int>(std::lround(static_cast<double>(lsb) * scale));
 
