@@ -7,7 +7,6 @@
 
 #include "core/context.hpp"
 #include "core/window_impl.hpp"
-#include "render/gl_surface.hpp"
 
 #include <windows.h>
 #include <windowsx.h>
@@ -520,8 +519,6 @@ public:
       scale = 1.0f;
     }
 
-    gl_raster::viewport_pixels(0, 0, static_cast<int>(last_w_),
-                               static_cast<int>(last_h_));
     in_present_ = true;
 
     if (out_width != nullptr) {
@@ -543,17 +540,6 @@ public:
     }
     in_present_ = false;
     (void)::wglMakeCurrent(nullptr, nullptr);
-  }
-
-  cgfx_result clear_normalized_rgba(float r, float g, float b,
-                                  float a) override {
-    if (!in_present_ || !hdc_ || !glrc_) {
-      return CGFX_ERROR_PLATFORM;
-    }
-    if (::wglMakeCurrent(hdc_, glrc_) == FALSE) {
-      return CGFX_ERROR_PLATFORM;
-    }
-    return gl_raster::clear_color_buffer_normalized(r, g, b, a);
   }
 
   cgfx_result query_size_px(uint32_t *out_w,

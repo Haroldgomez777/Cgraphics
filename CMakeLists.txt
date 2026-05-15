@@ -16,7 +16,7 @@ add_library(cgfx SHARED
   src/api/cgfx_api.cpp
   src/core/context.cpp
   src/core/window_impl.cpp
-  src/render/gl_surface.cpp
+  src/render/render_gl_device.cpp
 )
 
 target_include_directories(cgfx

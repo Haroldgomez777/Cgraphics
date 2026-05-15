@@ -1,6 +1,5 @@
 #include "core/context.hpp"
 #include "core/window_impl.hpp"
-#include "render/gl_surface.hpp"
 
 #include <GL/gl.h>
 #include <GL/glx.h>
@@ -10,7 +9,6 @@
 #include <X11/keysym.h>
 
 #include <algorithm>
-#include <cmath>
 #include <memory>
 #include <unordered_map>
 
@@ -132,8 +130,7 @@ public:
   X11Backend()
       : dpy_(XOpenDisplay(nullptr)),
         screen_(dpy_ ? DefaultScreen(dpy_) : 0),
-        wm_protocols_(dpy_ ? XInternAtom(dpy_, "WM_PROTOCOLS", False)
-                            : None),
+        wm_protocols_(dpy_ ? XInternAtom(dpy_, "WM_PROTOCOLS", False) : None),
         wm_delete_window_(dpy_ ? XInternAtom(dpy_, "WM_DELETE_WINDOW", False)
                                : None) {}
 
@@ -165,7 +162,7 @@ public:
     return (it == by_window_.end()) ? nullptr : it->second;
   }
 
-  void poll_events(CgfxContext *ctx) override;
+  void poll_events(CgfxContext *) override;
 
   std::unique_ptr<PlatformSurface>
   create_surface(CgfxWindow *owner, const cgfx_window_desc *desc,
@@ -191,19 +188,13 @@ public:
 
   cgfx_result initialize(const cgfx_window_desc *desc);
   void teardown() noexcept override;
-
   void dispatch_event(const XEvent &evt) noexcept;
 
   cgfx_result begin_present(uint32_t *out_width, uint32_t *out_height,
                             float *out_scale) override;
-
   void end_present() override;
 
-  cgfx_result clear_normalized_rgba(float r, float g, float b,
-                                    float a) override;
-
   cgfx_result query_size_px(uint32_t *out_w, uint32_t *out_h) const override;
-
   cgfx_result query_dpi_scale(float *out_scale) const override;
 
 private:
@@ -242,10 +233,8 @@ void X11Surface::enqueue_resize_event() noexcept {
   QueuedEvent ev{};
   ev.type = CGFX_EVENT_RESIZE;
   ev.window = owner();
-  ev.resize.width =
-      static_cast<uint32_t>((client_w_ < 1) ? 1 : client_w_);
-  ev.resize.height =
-      static_cast<uint32_t>((client_h_ < 1) ? 1 : client_h_);
+  ev.resize.width = static_cast<uint32_t>((client_w_ < 1) ? 1 : client_w_);
+  ev.resize.height = static_cast<uint32_t>((client_h_ < 1) ? 1 : client_h_);
   owner()->context().push_event(ev);
 }
 
@@ -261,15 +250,13 @@ cgfx_result X11Surface::initialize(const cgfx_window_desc *desc) {
 
   screen_ = DefaultScreen(dpy_);
 
-  static int attrib[] = {GLX_RGBA, GLX_DOUBLEBUFFER, GLX_DEPTH_SIZE, 24,
-                         None};
+  int attrib[] = {GLX_RGBA, GLX_DOUBLEBUFFER, GLX_DEPTH_SIZE, 24, None};
   XVisualInfo *vi = glXChooseVisual(dpy_, screen_, attrib);
   if (!vi) {
     return CGFX_ERROR_PLATFORM;
   }
 
   ::Window root = RootWindow(dpy_, screen_);
-
   Colormap cmap = XCreateColormap(dpy_, root, vi->visual, AllocNone);
 
   XSetWindowAttributes swa{};
@@ -282,16 +269,13 @@ cgfx_result X11Surface::initialize(const cgfx_window_desc *desc) {
 
   const unsigned long vm =
       CWColormap | CWBorderPixel | CWBackPixel | CWEventMask;
-
   const unsigned int ww =
       desc->width > 0 ? static_cast<unsigned int>(desc->width) : 960U;
-
   const unsigned int hh =
       desc->height > 0 ? static_cast<unsigned int>(desc->height) : 540U;
 
-  window_ = XCreateWindow(dpy_, root, 50, 50, ww, hh, 0, vi->depth,
-                          InputOutput, vi->visual, vm, &swa);
-
+  window_ = XCreateWindow(dpy_, root, 50, 50, ww, hh, 0, vi->depth, InputOutput,
+                          vi->visual, vm, &swa);
   if (window_ == 0U) {
     XFree(vi);
     return CGFX_ERROR_PLATFORM;
@@ -315,20 +299,14 @@ cgfx_result X11Surface::initialize(const cgfx_window_desc *desc) {
     XSetWMProtocols(dpy_, window_, &wm_del, 1);
   }
 
-  if (desc->title) {
-    XStoreName(dpy_, window_, desc->title);
-  } else {
-    XStoreName(dpy_, window_, "cgfx");
-  }
-
+  XStoreName(dpy_, window_, (desc->title && desc->title[0] != '\0') ? desc->title
+                                                                     : "cgfx");
   XMapWindow(dpy_, window_);
   XFlush(dpy_);
 
   if (glXMakeCurrent(dpy_, window_, glx_)) {
     refresh_geometry_from_server();
     enqueue_resize_event();
-    gl_raster::viewport_pixels(0, 0, static_cast<int>(client_w_),
-                               static_cast<int>(client_h_));
     (void)glXMakeCurrent(dpy_, None, nullptr);
   }
 
@@ -356,10 +334,9 @@ void X11Surface::teardown() noexcept {
     glx_ = nullptr;
   }
 
-  if (backend_ != nullptr && window_ != 0U) {
+  if ((backend_ != nullptr) && (window_ != 0U)) {
     backend_->unregister_window(window_);
   }
-
   backend_ = nullptr;
 
   if ((dpy_ != nullptr) && (window_ != 0U)) {
@@ -382,7 +359,6 @@ void X11Surface::dispatch_event(const XEvent &evt) noexcept {
     if (evt.xclient.format == 32 &&
         evt.xclient.message_type == backend_->protocols_atom() &&
         static_cast<Atom>(evt.xclient.data.l[0]) == backend_->delete_atom()) {
-
       QueuedEvent ev{};
       ev.type = CGFX_EVENT_CLOSE_REQUEST;
       ev.window = owner();
@@ -407,8 +383,7 @@ void X11Surface::dispatch_event(const XEvent &evt) noexcept {
     ev.type = CGFX_EVENT_MOUSE_BUTTON;
     ev.window = owner();
     ev.mb.button = MapButton(static_cast<unsigned int>(evt.xbutton.button));
-    ev.mb.action =
-        evt.type == ButtonPress ? CGFX_PRESS : CGFX_RELEASE;
+    ev.mb.action = (evt.type == ButtonPress) ? CGFX_PRESS : CGFX_RELEASE;
     ev.mb.x = evt.xbutton.x;
     ev.mb.y = evt.xbutton.y;
     owner()->context().push_event(ev);
@@ -417,15 +392,13 @@ void X11Surface::dispatch_event(const XEvent &evt) noexcept {
 
   case KeyPress:
   case KeyRelease: {
-
     QueuedEvent ev{};
     ev.type = CGFX_EVENT_KEY;
     ev.window = owner();
     KeySym ks = XLookupKeysym(&(const_cast<XEvent &>(evt)).xkey, 0);
     ev.key.key = MapKeysym(ks);
     ev.key.native_code = static_cast<uint32_t>(ks);
-    ev.key.action =
-        evt.type == KeyPress ? CGFX_PRESS : CGFX_RELEASE;
+    ev.key.action = (evt.type == KeyPress) ? CGFX_PRESS : CGFX_RELEASE;
     ev.key.repeat = 0;
     owner()->context().push_event(ev);
     return;
@@ -436,2207 +409,110 @@ void X11Surface::dispatch_event(const XEvent &evt) noexcept {
   }
 }
 
-cgfx_result X11Surface::begin_present(uint32_t *out_width,
-                                     uint32_t *out_height,
-                                     float *out_scale) {
-
+cgfx_result X11Surface::begin_present(uint32_t *out_width, uint32_t *out_height,
+                                      float *out_scale) {
   if ((!dpy_) || (window_ == 0U) || (!glx_)) {
     return CGFX_ERROR_PLATFORM;
   }
-  refresh_geometry_from_server();
 
+  refresh_geometry_from_server();
   if (glXMakeCurrent(dpy_, window_, glx_) == GL_FALSE) {
     return CGFX_ERROR_PLATFORM;
   }
 
-
-  const int vw = static_cast<int>(client_w_);
-  const int vh = static_cast<int>(client_h_);
-  gl_raster::viewport_pixels(0, 0,
-                             vw > 1 ? vw : 1,
-                             vh > 1 ? vh : 1);
-
   presenting_ = true;
-
-  const float s = ApproxDpiScale(dpy_, screen_);
-
   if (out_width) {
     *out_width = static_cast<uint32_t>(client_w_);
   }
-
   if (out_height) {
     *out_height = static_cast<uint32_t>(client_h_);
   }
-
   if (out_scale) {
-    *out_scale = s;
+    *out_scale = ApproxDpiScale(dpy_, screen_);
   }
 
   return CGFX_OK;
 }
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-void
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-    X11Surface::end_present()
-
-
-
-
-
-{
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-  if ((!dpy_)
-
-
-
-          ||
-
-      (window_
-
-
-
-
-              ==
-
-
-
-
-              0)
-
-
-
-          ||
-
-      (!glx_))
-
-
-
-  {
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-    presenting_ =
-
-
-
-
-        false;
-
-
-
+void X11Surface::end_present() {
+  if ((!dpy_) || (window_ == 0U) || (!glx_)) {
+    presenting_ = false;
     return;
-
-
-
   }
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-  if (presenting_)
-
-
-
-  {
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-    glXSwapBuffers
-
-
-
-
-        (dpy_, window_);
-
-
-
+  if (presenting_) {
+    glXSwapBuffers(dpy_, window_);
   }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-  presenting_
-
-
-
-
-      =
-
-
-
-
-      false;
-
-
-
-  (void)
-
-
-
-      glXMakeCurrent
-
-
-
-
-          (
-
-
-
-
-              dpy_,
-
-
-
-
-
-
-              None,
-
-
-
-
-
-              nullptr);
-
-
-
+  presenting_ = false;
+  (void)glXMakeCurrent(dpy_, None, nullptr);
 }
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-cgfx_result X11Surface::
-
-
-
-
-    clear_normalized_rgba(float r,
-
-
-
-
-                              float
-
-
-
-
-                                  g,
-
-
-
-
-                          float
-
-
-
-
-                              b,
-
-
-
-
-                          float
-
-
-
-
-                              a)
-
-
-
-
-
-{
-
-
-
-
-  if ((!presenting_)
-
-
-
-          ||
-
-      (!
-
-
-
-          dpy_)
-
-
-
-          ||
-
-      (
-
-
-
-
-          window_
-
-
-
-
-              ==
-
-
-
-
-              0)
-
-
-
-          ||
-
-      (!
-
-
-
-
-          glx_))
-
-
-
-  {
-
-
-
-
-    return CGFX_ERROR_PLATFORM;
-
-
-
-
-  }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-  if (glXMakeCurrent(dpy_, window_, glx_) == GL_FALSE)
-
-
-
-
-  {
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-    return CGFX_ERROR_PLATFORM;
-
-
-
-
-  }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-  return gl_raster::clear_color_buffer_normalized(r,
-
-
-
-
-                                                           g,
-
-
-
-
-                                                  b,
-
-
-
-
-                                                  a);
-
-
-
-
-}
-
-
-
-
-
-
-cgfx_result X11Surface::query_size_px(uint32_t *out_w,
-
-
-
-                                                     uint32_t *
-
-
-
-                                                                     out_h)
-
-
-
-
-
-                                        const
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-{
-
-
-
-
-
-
-
-
-
-
-
-
-
-  if ((!out_w)
-
-
-
-          ||
-
-      (!
-
-
-
-
-          out_h))
-
-
-
-  {
-
-
-
-
-    return
-
-
-
-
-        CGFX_ERROR_INVALID_ARGUMENT;
-
-
-
-  }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-  X11Surface *
-
-      mut =
-
-
-
-
-
-
-          const_cast<X11Surface *>
-
-
-
-              (
-
-
-
-
-                  this);
-
-
-
-  mut->
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-      refresh_geometry_from_server
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-          ();
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-  *
-
-      out_w = static_cast<uint32_t>((mut->
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-                                      client_
-
-
-
-
-                                                  w
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-                                          <
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-                                              1)
-
-
-
-
-                                                                  ?
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-                                              1
-                                          :
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-                                              mut->
-
-
-
-
-
-
-
-
-
-
-
-client_w_);
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
- *out_h =
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-         static_cast<uint32_t>((mut
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-                                   ->
-
-
-
-
-
-
-                                   client_
-
-
-
-
-                                                               h
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-                                   <
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-                                       1)
-
-
-
-
-                                                           ? 1
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-                                       :
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-                                           mut
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-                                               ->
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-                                               client_));
-
-
-
-
-
-
-
-
-
-
-
-
-
- return CGFX_OK;
-
-
-
-
-}
-
-
-
-
-
-
-
-cgfx_result X11Surface::query_dpi_scale(float *
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-                                         out)
-
-
-
-                                            const
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-{
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-  if ((!out)
-
-
-
-          ||
-
-      (!
-
-
-
-          dpy_))
-
-
-
-  {
-
-
-
-
+cgfx_result X11Surface::query_size_px(uint32_t *out_w, uint32_t *out_h) const {
+  if (!out_w || !out_h) {
     return CGFX_ERROR_INVALID_ARGUMENT;
-
-
-
   }
 
-
-
-  *out = ApproxDpiScale
-
-
-
-
-          (
-
-
-
-
-              dpy_, screen_);
-
-
-
- return CGFX_OK;
-
-
-
+  auto *mut = const_cast<X11Surface *>(this);
+  mut->refresh_geometry_from_server();
+  *out_w = static_cast<uint32_t>((mut->client_w_ < 1) ? 1 : mut->client_w_);
+  *out_h = static_cast<uint32_t>((mut->client_h_ < 1) ? 1 : mut->client_h_);
+  return CGFX_OK;
 }
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-void
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-    X11Backend::poll_events(CgfxContext *ctx)
-
-
-
-{
-
-
-
-
-
-
-
-
-
-
-
-
-
-  (void)
-
-
-
-      ctx;
-
-
-
-
-
-
-
-
-
-
-
-
-
-  if ((!dpy_)
-
-
-
-          ||
-
-      !display())
-
-
-
-  {
-
-
-
-
+cgfx_result X11Surface::query_dpi_scale(float *out_scale) const {
+  if (!out_scale || !dpy_) {
+    return CGFX_ERROR_INVALID_ARGUMENT;
+  }
+  *out_scale = ApproxDpiScale(dpy_, screen_);
+  return CGFX_OK;
+}
+
+void X11Backend::poll_events(CgfxContext *) {
+  if ((!dpy_) || !display()) {
     return;
-
-
-
   }
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-  while (XPending
-
-
-
-
-             (
-
-
-
-
-                 dpy_)
-
-
-
-         >
-
-
-
-             0)
-
-
-
-  {
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+  while (XPending(dpy_) > 0) {
     XEvent ev{};
+    XNextEvent(dpy_, &ev);
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-    XNextEvent
-
-
-
-
-        (
-
-
-
-
-            dpy_,
-
-
-
-
-
-
-            &
-
-
-
-
-
-
-                ev);
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-    X11Surface *
-
-        surf
-
-
-
-
-
-
-
-            =
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-                surface_for
-
-
-
-
-
-
-
-                    (ev.
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-                         xany.
-
-
-
-
-
-
-
-
-
-
-
-
-
-                         window
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-                    );
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-    if (!surf)
-
-
-
-    {
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+    X11Surface *surf = surface_for(ev.xany.window);
+    if (!surf) {
       continue;
-
-
-
     }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-    surf
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-        ->
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-        dispatch_event
-
-
-
-
-
-
-
-            (
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-                ev
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-            );
-
-
-
-
-
+    surf->dispatch_event(ev);
   }
-
-
-
-
-
 }
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-std
-
-
-
-
-    ::unique_ptr
-
-
-
-
-        <
-
-
-
-
-            PlatformSurface>
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-            X11Backend::
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-                create_surface(CgfxWindow *owner,
-
-
-
-
-                                               const
-
-
-
-
-                                                   cgfx_window_desc *
-
-
-
-
-                                                       desc,
-
-
-
-
-                                               cgfx_result &
-
-
-
-
-                                                            status)
-
-
-
-{
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-  status
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-      =
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-      CGFX_OK;
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-  if ((!owner)
-
-
-
-          ||
-
-      (!
-
-
-
-
-          desc)
-
-
-
-          ||
-
-      (!display()))
-
-
-
-  {
-
-
-
-
-    status = CGFX_ERROR_INVALID_ARGUMENT;
-
-
-
-
-
-
-
-    if (!
-
-
-
-
-        display())
-
-
-
-    {
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-      status = CGFX_ERROR_PLATFORM;
-
-
-
-    }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-    return
-
-
-
-
-        nullptr;
-
-
-
-  }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-  auto surf = std::make_unique<X11Surface>(owner,
-
-
-
-
-                                                                     this);
-
-
-
-  status
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-      =
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-      surf
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-          ->initialize(desc);
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-  if (status
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-      !=
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-      CGFX_OK)
-
-
-
-  {
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-    surf
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-        ->
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-        teardown
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-            ();
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-    surf.
-
-
-
-
-
-
-
-        reset
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-            ();
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+std::unique_ptr<PlatformSurface>
+X11Backend::create_surface(CgfxWindow *owner, const cgfx_window_desc *desc,
+                           cgfx_result &status) {
+  status = CGFX_OK;
+  if ((!owner) || (!desc) || (!display())) {
+    status = display() ? CGFX_ERROR_INVALID_ARGUMENT : CGFX_ERROR_PLATFORM;
     return nullptr;
-
-
-
   }
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+  auto surf = std::make_unique<X11Surface>(owner, this);
+  status = surf->initialize(desc);
+  if (status != CGFX_OK) {
+    surf->teardown();
+    surf.reset();
+    return nullptr;
+  }
   return surf;
-
-
-
 }
 
-
-
-
-
-
-}
-
-
-
+} // namespace cgfx::x11_detail
 
 namespace cgfx {
 
-
-
-
-
-
-
-std
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-    ::
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-    unique_ptr<PlatformBackend>
-
-
-
-        cgfx_make_x11_backend()
-
-
-
-{
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-  auto bk =
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-      std
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-          ::
-
-
-
-
-
-
-              make_unique<x11_detail::
-
-
-
-
-                              X11Backend>();
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-  if ((!bk)
-
-
-
-          ||
-
-      (!bk
-
-
-
-              ->
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-              display()))
-
-
-
-  {
-
-
-
-
+std::unique_ptr<PlatformBackend> cgfx_make_x11_backend() {
+  auto bk = std::make_unique<x11_detail::X11Backend>();
+  if ((!bk) || (!bk->display())) {
     return nullptr;
-
-
-
   }
-
-
-
   return bk;
-
-
-
 }
 
-
-
-
-}
-
-
-
+} // namespace cgfx

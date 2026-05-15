@@ -2,6 +2,8 @@
 
 #include <cgfx/cgfx_api.h>
 
+#include "render/render_device.hpp"
+
 #include <memory>
 
 namespace cgfx {
@@ -24,8 +26,6 @@ public:
                                     float *out_dpi) = 0;
   virtual void end_present() = 0;
 
-  virtual cgfx_result clear_normalized_rgba(float r, float g, float b,
-                                            float a) = 0;
   virtual cgfx_result query_size_px(uint32_t *out_w, uint32_t *out_h) const = 0;
   virtual cgfx_result query_dpi_scale(float *out_scale) const = 0;
 
@@ -64,10 +64,19 @@ public:
   void shutdown();
 
   PlatformSurface *surface() { return surface_.get(); }
+  RenderDevice *render_device() { return render_device_.get(); }
+
+  cgfx_result begin_present_pass(uint32_t *out_width_px, uint32_t *out_height_px,
+                                 float *out_dpi_scale);
+  cgfx_result clear_present_surface(float red, float green, float blue,
+                                    float alpha);
+  void end_present_pass();
 
 private:
   CgfxContext *ctx_{};
   std::unique_ptr<PlatformSurface> surface_{};
+  std::unique_ptr<RenderDevice> render_device_{};
+  bool presenting_{false};
 };
 
 } // namespace cgfx

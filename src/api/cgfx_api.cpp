@@ -146,28 +146,15 @@ cgfx_result cgfx_window_begin_present_pass(cgfx_window *window,
   if (!window) {
     return CGFX_ERROR_INVALID_ARGUMENT;
   }
-
-  cgfx::PlatformSurface *surface =
-      cgfx::CgfxWindow::from_opaque(window)->surface();
-  if (!surface) {
-    return CGFX_ERROR_PLATFORM;
-  }
-
-  return surface->begin_present(out_width_px, out_height_px, out_dpi_scale);
+  return cgfx::CgfxWindow::from_opaque(window)->begin_present_pass(
+      out_width_px, out_height_px, out_dpi_scale);
 }
 
 void cgfx_window_end_present_pass(cgfx_window *window) {
   if (!window) {
     return;
   }
-
-  cgfx::PlatformSurface *surface =
-      cgfx::CgfxWindow::from_opaque(window)->surface();
-  if (!surface) {
-    return;
-  }
-
-  surface->end_present();
+  cgfx::CgfxWindow::from_opaque(window)->end_present_pass();
 }
 
 cgfx_result cgfx_surface_clear_normalized_rgba(cgfx_window *window, float red,
@@ -176,14 +163,8 @@ cgfx_result cgfx_surface_clear_normalized_rgba(cgfx_window *window, float red,
   if (!window) {
     return CGFX_ERROR_INVALID_ARGUMENT;
   }
-
-  cgfx::PlatformSurface *surface =
-      cgfx::CgfxWindow::from_opaque(window)->surface();
-  if (!surface) {
-    return CGFX_ERROR_PLATFORM;
-  }
-
-  return surface->clear_normalized_rgba(red, green, blue, alpha);
+  return cgfx::CgfxWindow::from_opaque(window)->clear_present_surface(
+      red, green, blue, alpha);
 }
 
 cgfx_result cgfx_window_get_size_pixels(const cgfx_window *window,
