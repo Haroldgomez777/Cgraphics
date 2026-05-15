@@ -7,6 +7,8 @@
 namespace cgfx {
 namespace style_resolution {
 
+/** Panel fill: `WidgetStyleOverrides` (Phase 6) > `PanelFacet.bg_explicit` (Phase 5) >
+ *  `UiTheme.panel_background`. Keep in sync with `BasicWidgets::paint` and query APIs. */
 inline RgbaNormalized resolve_panel_background(const UiTheme &theme,
                                                  const WidgetStyleOverrideRecord *ov,
                                                  const PanelFacet &facet) noexcept {

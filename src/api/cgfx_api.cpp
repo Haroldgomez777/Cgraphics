@@ -813,6 +813,7 @@ cgfx_result cgfx_basic_widget_panel_set_background_rgba_normalized(
   if (!window) {
     return CGFX_ERROR_INVALID_ARGUMENT;
   }
+  /* Phase 5 facet path; see header for precedence vs `cgfx_widget_style_set_panel_background_*`. */
   return cgfx::CgfxWindow::from_opaque(window)
       ->basic_widgets_mut()
       .set_panel_background_rgba(panel_id, r, g, b, a);
@@ -1066,6 +1067,7 @@ cgfx_result cgfx_widget_style_set_panel_background_rgba_normalized(
   if (!window) {
     return CGFX_ERROR_INVALID_ARGUMENT;
   }
+  /* Canonical Phase 6 panel background; see `cgfx_basic_widget_panel_set_background_*` for facet path. */
   return cgfx::CgfxWindow::from_opaque(window)
       ->widget_style_overrides_mut()
       .set_panel_background(widget_id, r, g, b, a);

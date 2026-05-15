@@ -1,4 +1,6 @@
-/** Phase 6: theme tokens, per-widget overrides, resolution order, button states (offline). */
+/** Phase 6: theme tokens, per-widget overrides, panel resolution order (override > legacy facet >
+ *  theme), button states (offline).
+ */
 
 #include "core/widget_tree.hpp"
 #include "layout/flex_layout.hpp"
@@ -101,13 +103,29 @@ int main() {
     assert(near_f(v.r, 0.01f) && near_f(v.g, 0.02f) && near_f(v.b, 0.03f));
   }
 
-  /** --- Phase 5 legacy explicit panel color sits between theme and style override --- */
+  /** --- Legacy facet sits below Phase 6 panel override, above theme --- */
   assert(widgets.set_panel_background_rgba(panel, 0.5f, 0.5f, 0.5f, 1.f) == CGFX_OK);
   cmds.reset();
   assert(widgets.paint(tree, cmds, warm, ovs) == CGFX_OK);
   {
     FillRectView v = nth_fill_rect(cmds, 0);
     assert(near_f(v.r, 0.01f)); /* override still dominates */
+    (void)v;
+  }
+
+  /** --- Clearing only CGFX_WIDGET_STYLE_OVERRIDE_PANEL_BACKGROUND exposes legacy facet --- */
+  ovs.clear(panel, static_cast<uint32_t>(
+                      cgfx::WidgetStyleOverrideMask::PanelBackground));
+  float qr{}, qg{}, qb{}, qa{};
+  assert(widgets.query_resolved_panel_background_rgba_normalized(
+             panel, warm, ovs, &qr, &qg, &qb, &qa) == CGFX_OK);
+  assert(near_f(qr, 0.5f) && near_f(qg, 0.5f) && near_f(qb, 0.5f));
+  cmds.reset();
+  assert(widgets.paint(tree, cmds, warm, ovs) == CGFX_OK);
+  {
+    FillRectView v = nth_fill_rect(cmds, 0);
+    assert(near_f(v.r, qr) && near_f(v.g, qg) && near_f(v.b, qb));
+    assert(near_f(v.r, 0.5f) && near_f(v.g, 0.5f) && near_f(v.b, 0.5f));
     (void)v;
   }
 

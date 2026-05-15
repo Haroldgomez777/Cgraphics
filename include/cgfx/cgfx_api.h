@@ -425,8 +425,10 @@ CGFX_API cgfx_result cgfx_basic_widget_button_create(cgfx_window *window,
 /** Record basic-widget visuals for facets into the Phase 2 command list — call each frame inside
  *  `cgfx_window_begin_present_pass` / `cgfx_window_end_present_pass`.
  *
- * Colors resolve from per-window theme tokens + stylesheet overrides (Phase 6). Labels still render
- * UTF-8 via a clipped placeholder strip until the Phase 7 text subsystem lands. */
+ * Colors resolve from per-window theme tokens + Phase 6 per-widget overrides; panels additionally
+ * consider the Phase 5 facet path (see `cgfx_basic_widget_panel_set_background_rgba_normalized`).
+ * Panels: override > legacy facet > theme token. Labels still render UTF-8 via a clipped
+ * placeholder strip until the Phase 7 text subsystem lands. */
 CGFX_API cgfx_result cgfx_window_draw_basic_widgets(cgfx_window *window);
 
 CGFX_API cgfx_result cgfx_basic_widget_set_visible(cgfx_window *window,
@@ -437,6 +439,19 @@ CGFX_API cgfx_result cgfx_basic_widget_get_visible(cgfx_window *window,
                                                    cgfx_widget_id widget_id,
                                                    int *out_visible);
 
+/** Phase 5 compatibility: stores the panel fill on the facet (`bg_explicit`) separate from
+ *  Phase 6 style overrides.
+ *
+ *  Deterministic resolution order (same as paint and
+ *  `cgfx_widget_style_query_resolved_panel_background_rgba_normalized`):
+ *    1. `cgfx_widget_style_set_panel_background_rgba_normalized` when that override is set
+ *    2. else this facet color after a successful call here
+ *    3. else `CGFX_THEME_COLOR_PANEL_BACKGROUND` on the active window theme
+ *
+ *  Prefer `cgfx_widget_style_set_panel_background_rgba_normalized` for new code so panel
+ *  color participates in the override/clear model. This function remains fully supported
+ *  for existing callers. Clearing the legacy facet to return to theme-only is not exposed
+ *  as a dedicated C API today (recreate the widget, or standardize on overrides). */
 CGFX_API cgfx_result cgfx_basic_widget_panel_set_background_rgba_normalized(
     cgfx_window *window, cgfx_widget_id panel_id, float r, float g, float b, float a);
 
@@ -557,6 +572,10 @@ typedef enum cgfx_button_face_query_scenario {
   CGFX_BUTTON_FACE_QUERY_DISABLED = 3,
 } cgfx_button_face_query_scenario;
 
+/** Canonical per-widget panel background (Phase 6). Highest precedence: wins over
+ *  `cgfx_basic_widget_panel_set_background_rgba_normalized` and the panel theme token.
+ *  Remove with `cgfx_widget_style_clear_overrides(...,
+ *  CGFX_WIDGET_STYLE_OVERRIDE_PANEL_BACKGROUND)`. */
 CGFX_API cgfx_result cgfx_widget_style_set_panel_background_rgba_normalized(
     cgfx_window *window, cgfx_widget_id widget_id, float r, float g, float b, float a);
 
@@ -593,6 +612,8 @@ CGFX_API cgfx_result cgfx_widget_style_clear_overrides(cgfx_window *window,
 CGFX_API cgfx_result cgfx_widget_style_clear_all_overrides(cgfx_window *window,
                                                            cgfx_widget_id widget_id);
 
+/** Writes the same RGBA `BasicWidgets::paint` would use: override, then legacy facet, then
+ *  theme token (`CGFX_THEME_COLOR_PANEL_BACKGROUND`). */
 CGFX_API cgfx_result cgfx_widget_style_query_resolved_panel_background_rgba_normalized(
     cgfx_window *window, cgfx_widget_id panel_id, cgfx_color_rgba *out_color);
 

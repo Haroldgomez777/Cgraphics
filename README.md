@@ -164,7 +164,7 @@ Phase 5 layers a **facet registry** on the existing tree/flex core (`src/widgets
 | --- | --- |
 | **Geometry** | Phase 4 flex + `cgfx_widget_bounds_logical_px` unchanged. |
 | **Hit testing** | **`cgfx_window_hit_test_logical_px`** remains a **pure geometric** pick (back-compat). Routed pointer events (**`target_widget`** on move/button) use **`visible=false` facet** filtering so hidden subtrees behave like pass-through. |
-| **Rendering** | **`cgfx_window_draw_basic_widgets(win)`** emits fills via **Phase 6 style resolution**: per-window `UiTheme` tokens + optional per-widget overrides + legacy **`cgfx_basic_widget_panel_set_background_rgba_normalized`** semantics (`bg_explicit`). Button faces pick **normal / hover / pressed / disabled** layers from tokens unless overridden by **`cgfx_widget_style_set_button_*`** helpers. Labels use theme placeholder tint until the **Phase 7** text renderer consumes **`label_text_color` / label font-size** placeholders. Call after layout, inside a present pass. |
+| **Rendering** | **`cgfx_window_draw_basic_widgets(win)`** emits fills via **Phase 6 style resolution**: per-window `UiTheme` tokens + **`cgfx_widget_style_set_*`** overrides (canonical for panel tint) + optional legacy **`cgfx_basic_widget_panel_set_background_rgba_normalized`** facet color when no panel override is set. Button faces pick **normal / hover / pressed / disabled** layers from tokens unless overridden by **`cgfx_widget_style_set_button_*`** helpers. Labels use theme placeholder tint until the **Phase 7** text renderer consumes **`label_text_color` / label font-size** placeholders. Call after layout, inside a present pass. |
 | **Text** | Labels and button captions store UTF-8; paint uses a **thin placeholder strip**. **TODO(seam):** replace with **`cgfx_basic_widget_utf8_text_*`** driving the **Phase 7** text subsystem; typography tokens (`cgfx_theme_metric_token`, `LABEL_TEXT`, `BUTTON_TEXT`) exist on the theme/overrides APIs as placeholders until then. |
 | **Clicks** | **Polling model:** on left-button release after a press on the **same** logical `BUTTON` facet, the library appends **`CGFX_EVENT_WIDGET_CLICK`** with **`cgfx_event_widget_click_payload`** (**`widget_id`**, **`button`**, **`x`**, **`y`**). dequeue via **`cgfx_next_event_into`**. Disabled buttons suppress hover tinting and activation. |
 
@@ -208,8 +208,10 @@ Phase 6 adds a **scoped resolution path** layered _without replacing_ the retain
 | --- | --- |
 | **`UiTheme` (per window)** | Canonical **palette + spacing / typography placeholders** (`panel_background`, button state backgrounds, **`padding_sm_px`**, **`label_font_size_sp`**, etc.). Fresh windows start from **`cgfx_theme_reset_to_defaults`** parity (= historical Phase 5 literals). Mutations affect the **next** `cgfx_window_draw_basic_widgets` pass (no deferred invalidation caches). |
 | **`WidgetStyleOverrides` (map)** | **Explicit per-widget bitmask overrides** wired through `cgfx_widget_style_set_*`; cleared selectively with `cgfx_widget_style_clear_overrides`. Entries are destroyed when subtrees are removed (`cgfx_widget_destroy` purges facets + style rows). |
-| **Facet carry-over (Phase 5)** | `PanelFacet.bg_explicit`: **`cgfx_basic_widget_panel_set_background_rgba_normalized`** marks the panel **legacy pinned** until cleared by hand; resolves **below** stylesheet overrides **but above** naked theme defaults for that channel. |
+| **Facet carry-over (Phase 5)** | `PanelFacet.bg_explicit`: **`cgfx_basic_widget_panel_set_background_rgba_normalized`** pins RGBA on the facet for compatibility. It resolves **below** Phase 6 overrides **but above** the panel theme token. There is **no** dedicated C API to clear this facet flag; new work should use overrides only, or recreate the widget if you must drop legacy state. |
 | **Effective paint/debug** | `BasicWidgets::paint` asks `style_resolution::*` helpers: **override → legacy explicit facet → theme token**. `cgfx_widget_style_query_resolved_*` mirrors the combiner for debugging. |
+
+**Panel background — recommended API:** use **`cgfx_widget_style_set_panel_background_rgba_normalized`** and **`cgfx_widget_style_clear_overrides(..., CGFX_WIDGET_STYLE_OVERRIDE_PANEL_BACKGROUND)`**. Treat **`cgfx_basic_widget_panel_set_background_rgba_normalized`** as Phase 5 compatibility only (separate storage from overrides; see precedence table above).
 
 **Opaque theme snapshots (`cgfx_theme`)** duplicate the same blob as each window — use **`cgfx_window_theme_copy_to` / `cgfx_window_theme_apply`** or create standalone bundles with **`cgfx_theme_create`**.
 
@@ -236,7 +238,7 @@ cgfx_widget_style_query_resolved_button_face_rgba_normalized(
 
 ### Phase 6: tests
 
-- **`cgfx_phase6_style_test`** — token-driven paint, override vs theme vs legacy panel precedence, hover paint path, pressed override via resolution queries (**no GPU**).
+- **`cgfx_phase6_style_test`** — token-driven paint, override vs theme vs legacy panel precedence, selective `clear_overrides` vs legacy facet, query API vs paint, hover path, pressed override via resolution queries (**no GPU**).
 
 ## Prerequisites
 

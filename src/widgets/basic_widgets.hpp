@@ -32,7 +32,8 @@ struct WidgetClickSynthesisResult {
 enum class BasicWidgetKind : uint8_t { Panel = 1, Label = 2, Button = 3 };
 
 struct PanelFacet {
-  /** When false, Phase 6 paint uses live `UiTheme.panel_background`. */
+  /** Phase 5 legacy path: when true, paint uses stored RGBA unless a Phase 6 panel
+   *  background override is set. Prefer `cgfx_widget_style_set_panel_background_rgba_normalized`. */
   bool bg_explicit = false;
   float bg_r = 0.f;
   float bg_g = 0.f;
