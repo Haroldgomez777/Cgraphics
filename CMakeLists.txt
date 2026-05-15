@@ -77,6 +77,16 @@ set_target_properties(cgfx PROPERTIES
 if(CGFX_BUILD_EXAMPLES)
   add_executable(cgfx_demo examples/demo_main.c)
   target_link_libraries(cgfx_demo PRIVATE cgfx)
+
+  add_executable(cgfx_professional_app
+    examples/professional_app/main.c
+    examples/professional_app/theme_setup.c
+    examples/professional_app/ui_layout.c
+  )
+  target_link_libraries(cgfx_professional_app PRIVATE cgfx)
+  target_include_directories(cgfx_professional_app PRIVATE
+    "${CMAKE_CURRENT_SOURCE_DIR}/examples/professional_app"
+  )
 endif()
 
 if(CGFX_BUILD_TESTS)
@@ -237,4 +247,10 @@ if(CGFX_BUILD_TESTS)
   target_compile_options(cgfx_animation_phase8_test PRIVATE
       $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall -Wextra -Wpedantic>)
   add_test(NAME cgfx_animation_phase8_test COMMAND cgfx_animation_phase8_test)
+
+  add_executable(cgfx_professional_app_api_smoke
+    tests/professional_app_api_smoke.c)
+  target_link_libraries(cgfx_professional_app_api_smoke PRIVATE cgfx)
+  add_test(NAME cgfx_professional_app_api_smoke
+    COMMAND cgfx_professional_app_api_smoke)
 endif()

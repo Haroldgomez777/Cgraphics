@@ -1,4 +1,4 @@
-# cgfx (Phase 2 → Phase 8 animations)
+# cgfx (Phase 2 → Phase 9 professional showcase)
 
 `cgfx` is a cross-platform GUI graphics framework in C/C++.
 
@@ -310,7 +310,7 @@ cgfx_context_set_text_font(ctx, face);
 
 - No real glyph outlines, kerning, ligatures, bidi, or font files — metrics are **documented stub tables** only.
 - Label placeholder marker color (`LabelFacet.marker_explicit` / `CGFX_THEME_COLOR_LABEL_PLACEHOLDER`) is **not** used for the Phase 7 caption strip; paint uses **`CGFX_THEME_COLOR_LABEL_TEXT`** (plus Phase 6 text-color overrides). Use marker fields for future decoration if needed.
-- Multi-line wrapping, ellipses, and rich text are **Phase 9+** (animations are **Phase 8**).
+- Multi-line wrapping, ellipses, and rich text remain **future** work (beyond this sample).
 - Passing **`CGFX_FONT_ID_INVALID`** to **`cgfx_text_measure_utf8_line_pixels`** resolves the context’s **`cgfx_context_text_font_selected`** (**`cgfx_context_get_text_font`**) handle.
 
 #### Phase 7.1 (next)
@@ -349,7 +349,45 @@ Each **`cgfx_window_begin_present_pass`** runs flex layout, samples the context 
 - Hit-test parity for translated visuals (or layout-level offset channels).
 - Completion callbacks / loops; optional auto-prune of finished clips; cheaper per-widget clip lookup than sort-on-every-paint.
 
-## Prerequisites
+### Phase 9: professional showcase application
+
+Phase 9 delivers a **non-toy sample** under `examples/professional_app/` that exercises the public C API end-to-end:
+
+| Area | What the app does |
+| --- | --- |
+| **Shell** | `cgfx_context` + `cgfx_window`, poll loop, present pass, clear + `cgfx_window_draw_basic_widgets`. |
+| **Layout** | Multi-panel flex tree (chrome row, sidebar + main column, nested hero card, action row). |
+| **Widgets** | Panels, labels, buttons; UTF-8 captions via `cgfx_basic_widget_utf8_text_set`. |
+| **Theme / style** | `cgfx_window_theme_*` tokens, `cgfx_widget_style_set_*` overrides (sidebar + hero + button faces). |
+| **Text** | `cgfx_font_builtin_acquire_mono_stub` + `cgfx_context_set_text_font`; status line shows `cgfx_text_measure_utf8_line_cstr_pixels` each update. |
+| **Input** | `CGFX_INPUT_PROPAGATION_BUBBLE_TO_PARENT` for pointer routing; `CGFX_EVENT_WIDGET_CLICK` on buttons; `Escape` closes. |
+| **Animation** | Each primary-button activation runs `cgfx_animation_start_translate_logical_px` on the hero card (`CGFX_ANIM_EASE_OUT_QUAD`); reset stops translate clips. |
+
+**Regression / CI:** `cgfx_professional_app_api_smoke` (in `tests/professional_app_api_smoke.c`) links the library and validates font/measurement/theme/animation clock entry points **without creating a window** — use it when GPUs or displays are unavailable. The **`cgfx_professional_app`** binary remains the interactive harness for manual QA.
+
+**Known limitations** (same as Phases 7–8): placeholder text strips (no real glyph atlas), translate affects paint only (`cgfx_widget_bounds_logical_px` / hit-test stay in layout space), bubbling duplicates `CGFX_EVENT_MOUSE_BUTTON`/`KEY` queue entries — not `CGFX_EVENT_WIDGET_CLICK`.
+
+#### Phase 9: run
+
+After a preset build (`cmake --preset windows-mingw-debug` and `cmake --build --preset build-windows-mingw-debug`):
+
+```powershell
+.\build\windows-mingw-debug\cgfx_professional_app.exe
+```
+
+Linux (after `cmake --preset linux-gcc-debug`):
+
+```bash
+./build/linux-gcc-debug/cgfx_professional_app
+```
+
+**Expect:** Dark themed layout with sidebar copy, hero card showing a numeric counter and blurb; **Record interaction** increments the counter, updates the measurement line, and animates the card horizontally; **Reset** clears count and snaps motion; mouse moves show hover affordances on buttons; **Escape** exits.
+
+#### Phase 9: automated check
+
+```powershell
+ctest --preset test-windows-mingw-debug -R cgfx_professional_app_api_smoke
+```
 
 
 ### Windows
@@ -410,10 +448,15 @@ cmake --build build -j
 
 ## Run Example
 
-After building, run the demo executable:
+After building, you can launch:
 
-- Preset output (recommended): Windows `build/windows-mingw-debug/cgfx_demo.exe`, Linux `build/linux-gcc-debug/cgfx_demo`
-- Plain `cmake -S . -B build` layouts: Windows `build/cgfx_demo.exe`, Linux `build/cgfx_demo`
+- **Phase 2 demo:** `cgfx_demo` — batch + single rectangle compositing sanity check (`examples/demo_main.c`).
+- **Phase 9 showcase:** `cgfx_professional_app` — full widget stack regression harness (`examples/professional_app/`).
+
+Paths:
+
+- Preset output (recommended): Windows `build/windows-mingw-debug/cgfx_demo.exe` and `build/windows-mingw-debug/cgfx_professional_app.exe`, Linux `build/linux-gcc-debug/cgfx_demo` and `cgfx_professional_app`
+- Plain `cmake -S . -B build` layouts: sibling `.exe`/binaries inside `build/` (generator-dependent)
 
 ## Phase 2.3: Batch filled rectangles (`cgfx_surface_fill_rect_batch_pixels`)
 
@@ -442,7 +485,7 @@ Notes:
 
 ## Baseline Verification
 
-The library baseline is considered stable when **`cmake --preset windows-mingw-debug`**, **`cmake --build --preset build-windows-mingw-debug`**, and **`ctest --preset test-windows-mingw-debug`** all succeed on Windows (or the equivalent Linux preset). Include **Phase 7–8** coverage — **`cgfx_text_measurement_test`**, **`cgfx_widget_text_integration_test`**, **`cgfx_animation_phase8_test`** — alongside earlier suites.
+The library baseline is considered stable when **`cmake --preset windows-mingw-debug`**, **`cmake --build --preset build-windows-mingw-debug`**, and **`ctest --preset test-windows-mingw-debug`** all succeed on Windows (or the equivalent Linux preset). Include **Phase 7–9** coverage — **`cgfx_text_measurement_test`**, **`cgfx_widget_text_integration_test`**, **`cgfx_animation_phase8_test`**, **`cgfx_professional_app_api_smoke`** — alongside earlier suites.
 
 ## Project Layout (Current Phase)
 
@@ -455,5 +498,6 @@ The library baseline is considered stable when **`cmake --preset windows-mingw-d
 - `src/text/` - Phase 7 font registry + deterministic measurement + raster placeholder seam
 - `src/platform/` - Win32/X11 platform backends
 - `src/render/` - minimal OpenGL surface/present helpers
-- `examples/` - demo app
+- `examples/demo_main.c` - Phase 2 rendering demo
+- `examples/professional_app/` — Phase 9 retained-mode showcase (panels, labels, buttons, theme, text measure, animations)
 - `tests/` - smoke tests + **`event_queue_test`** + **`widget_layout_test`**
